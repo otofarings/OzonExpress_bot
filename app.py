@@ -14,14 +14,19 @@ logger = logging.getLogger(__name__)
 
 async def main():
     await db_query(dir_func=create_tables)
-    # await send_message_to_logs(dp, start_up=True)
+
     if not DEBUG:
+        await send_message_to_logs(dp, start_up=True)
         await start_polling()
+
     try:
         await dp.skip_updates()
         await dp.start_polling()
+
     finally:
-        # await send_message_to_logs(dp, turn_off=True)
+        if not DEBUG:
+            await send_message_to_logs(dp, turn_off=True)
+
         await dp.storage.close()
         await dp.storage.wait_closed()
         await bot.session.close()
@@ -30,5 +35,6 @@ async def main():
 if __name__ == '__main__':
     try:
         asyncio.run(main())
+
     except (KeyboardInterrupt, SystemExit):
         logger.error("Бот остановлен!")

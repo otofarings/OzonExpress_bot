@@ -12,11 +12,9 @@ CREATOR_SECRET = env.str("CREATOR_SECRET")
 IP = env.str("IP")
 
 TIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
-
 LOGGING_FORMAT = "%(asctime)s - %(levelname)s - %(name)s - %(message)s"
 
 API_URL = "https://api-seller.ozon.ru"
-
 USER_AGENT = "Mozilla/5.0 (Linux; 12; SM-G988B) AppleWebKit/537.36 (KHTML%2C like Gecko) Chrome/96.0.4664.45 Mobile Safari/537.36"
 
 MAX_DISTANCE = 5000
