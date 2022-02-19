@@ -6,7 +6,7 @@ env.read_env()
 BOT_TOKEN = env.str("BOT_TOKEN")
 BOT_NAME = env.str("BOT_NAME")
 
-CREATORS = [int(env.str("CREATOR")), int(env.str("CREATOR1"))]
+CREATORS = [int(env.str("CREATOR1")), int(env.str("CREATOR2"))]
 CREATOR_SECRET = env.str("CREATOR_SECRET")
 
 IP = env.str("IP")
