@@ -6,29 +6,29 @@ import aiogram.utils.markdown as fmt
 import logging
 
 from loader import dp
-from data.condition import ORDER_STATE, API_METHODS
-from data.config import API_URL, USER_AGENT, DEBUG, MODER_LOGS
-from utils.db_api.database import db_query
-from utils.proccess_time import get_time, change_dt_api_format
+from utils.db import sql
+from data.condition import ORDER_STATUS_API, API_METHODS
+from data.config import API_URL, USER_AGENT, DEBUG
+from utils.message import cancel_action_message
+from utils.proccess_time import get_time, change_dt_api_format, get_predict_time_for_delivery
 
 
-async def start_polling():
-    try:
-        logging.info('Старт опроса API')
-        asyncio.create_task(main())
+async def start_polling_api():
+    if not DEBUG:
+        try:
+            logging.info('Старт опроса API')
+            asyncio.create_task(main())
 
-    except Exception as e:
-        print(e)
+        except Exception as e:
+            print(e)
 
 
 async def main():
     while True:
+        await asyncio.sleep(5)
+
         try:
-            await asyncio.sleep(5)
-            sellers = await db_query(func='fetch',
-                                     sql="""SELECT * FROM api;""",
-                                     kwargs=[])
-            for seller in sellers[0]:
+            for seller in await sql.get_seller_api_info():
                 await check_response(await get_api_response(seller), seller)
 
         except asyncio.CancelledError:
@@ -45,10 +45,8 @@ async def main():
 
 async def get_api_response(seller):
     try:
-
         async with aiohttp.ClientSession() as session:
             try:
-
                 async with session.post(**await get_unfulfilled_list(seller)) as response:
                     try:
                         result = await response.json()
@@ -63,10 +61,11 @@ async def get_api_response(seller):
 
             except (TimeoutError, ValueError) as error_1:
                 logging.error(error_1)
+                await asyncio.sleep(15)
 
     except (ServerDisconnectedError, ClientResponseError, ClientConnectorError) as error_2:
         logging.error(error_2)
-        pass
+        await asyncio.sleep(15)
 
 
 async def get_unfulfilled_list(api):
@@ -86,32 +85,42 @@ async def check_response(response, seller):
         logging.info(len(response))
 
     if response:
-        exists_orders = await db_query(func='fetch',
-                                       sql="""SELECT posting_number, status, cancel_reason_id  FROM order_info 
-                                                      WHERE warehouse_id = $1 ORDER BY shipment_date;""",
-                                       kwargs=[seller["warehouse_id"]])
+        exists_orders = await sql.get_orders_info_for_polling(seller["warehouse_id"])
 
         for order_info in response:
             try:
-                if order_info["posting_number"] not in [order["posting_number"] for order in exists_orders[0]]:
+                if order_info["posting_number"] not in [order["posting_number"] for order in exists_orders]:
                     logging.info(f"NEW ORDER {order_info['posting_number']}")
                     await change_order(order_info, seller, new=True)
 
                 else:
-                    for exist_order in exists_orders[0]:
+                    for exist_order in exists_orders:
                         if order_info["posting_number"] == exist_order["posting_number"]:
                             if order_info["cancellation"]["cancel_reason_id"] != exist_order["cancel_reason_id"]:
                                 logging.info(f"CANCELED ORDER {order_info['posting_number']}")
+                                await sql.update_order_last_status(order_info["status"],
+                                                                   order_info['posting_number'],
+                                                                   seller["timezone"])
                                 await change_order(order_info, seller, cancel=True)
 
-                            elif order_info["status"] != exist_order["status"]:
+                            elif order_info["status"] != exist_order["status_api"]:
+                                if order_info["status"] in ["delivered", "cancelled"]:
+                                    await sql.update_order_last_status(order_info["status"],
+                                                                       order_info['posting_number'],
+                                                                       seller["timezone"])
+
                                 await change_order(order_info, seller, status=order_info["status"])
+
+                            elif order_info["status"] != exist_order["status"]:
+                                if order_info["status"] in ["delivered", "cancelled"]:
+                                    await sql.update_order_last_status(order_info["status"],
+                                                                       order_info['posting_number'],
+                                                                       seller["timezone"])
 
                             break
 
-            except TypeError:
-
-                logging.info(f"ERROR - {TypeError}")
+            except TypeError as e:
+                logging.info(f"ERROR - {e}")
 
     return
 
@@ -123,52 +132,10 @@ async def change_order(order, seller, new: bool = False, cancel: bool = False, s
     complete = True
 
     try:
-        await db_query(func='execute',
-                       sql="""WITH src AS (INSERT INTO order_info 
-                                                   (posting_number, order_id, order_number, warehouse_id, status, 
-                                                    address, zip_code, latitude, longitude, 
-                                                    customer_id, customer_name, customer_phone, customer_email, 
-                                                    customer_comment, addressee_name, addressee_phone, 
-                                                    in_process_at, shipment_date, 
-                                                    cancel_reason_id, cancel_reason, cancellation_type, 
-                                                    cancelled_after_ship, affect_cancellation_rating, 
-                                                    cancellation_initiator)
-                                      VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 
-                                             $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
-                                      ON CONFLICT (posting_number) DO UPDATE
-                                      SET status = $5, customer_comment = $14, cancel_reason_id = $19, 
-                                      cancel_reason = $20, cancellation_type = $21, cancelled_after_ship = $22, 
-                                      affect_cancellation_rating = $23, cancellation_initiator = $24 RETURNING *)
-                                      INSERT INTO logs_status_changes (date, status, status_ozon_seller, posting_number) 
-                                      VALUES($25, $5, $5, $1);""",
-                       kwargs=[order['posting_number'], order['order_id'], order['order_number'],
-                                       order['delivery_method']['warehouse_id'], order["status"],
-                                       order['customer']['address']['address_tail'],
-                                       order['customer']['address']['zip_code'],
-                                       float(order['customer']['address']['latitude']),
-                                       float(order['customer']['address']['longitude']),
-                                       order['customer']['customer_id'], order['customer']['name'],
-                                       order['customer']['phone'], order['customer']['customer_email'],
-                                       order['customer']['address']['comment'],
-                                       order['addressee']['name'], order['addressee']['phone'],
-                                       in_process_at, shipment_date, order['cancellation']['cancel_reason_id'],
-                                       order['cancellation']['cancel_reason'],
-                                       order['cancellation']['cancellation_type'],
-                                       order['cancellation']['cancelled_after_ship'],
-                                       order['cancellation']['affect_cancellation_rating'],
-                                       order['cancellation']['cancellation_initiator'],
-                                       current_time])
+        await sql.create_new_order(order, in_process_at, shipment_date, current_time)
 
         if new:
-            for product in order['products']:
-                await db_query(func='execute',
-                               sql="""INSERT INTO order_list 
-                                              (order_id, posting_number, sku, name, offer_id, 
-                                               quantity, price, fact_quantity, changed) 
-                                              VALUES($1, $2, $3, $4, $5, $6, $7, $6, $8);""",
-                               kwargs=[order['order_id'], order['posting_number'], product['sku'],
-                                               product['name'], product['offer_id'], product['quantity'],
-                                               float(product['price']), False])
+            await sql.create_new_products(order)
 
     except TypeError:
         logging.info(f"ERROR - {TypeError}")
@@ -179,7 +146,8 @@ async def change_order(order, seller, new: bool = False, cancel: bool = False, s
             title = fmt.hitalic("Новый заказ")
 
         elif cancel:
-            title = fmt.hitalic("Изменение в заказе")
+            title = fmt.hitalic("❗Изменение в заказе❗")
+            await cancel_action_message(order['posting_number'])
 
         else:
             title = ""
@@ -191,13 +159,13 @@ async def change_order(order, seller, new: bool = False, cancel: bool = False, s
 
 
 async def send_info_msg(order, in_process_at, shipment_date, seller, title, current_time):
-    last_time = await get_time(0.5, plus=True, tz=seller["timezone"])
+    complete_time = await get_predict_time_for_delivery(shipment_date, 24)
     text = fmt.text(
         fmt.text(fmt.hbold("Номер отправления: "), order["posting_number"]),
-        fmt.text(fmt.hbold("Статус: "), ORDER_STATE[order["status"]]),
+        fmt.text(fmt.hbold("Статус: "), ORDER_STATUS_API[order["status"]]),
         fmt.text(fmt.hbold("Время создания: "), str(in_process_at)),
         fmt.text(fmt.hbold("Передать курьеру до: "), str(shipment_date)),
-        fmt.text(fmt.hbold("Передать клиенту до: "), str(last_time)[:-7]),
+        fmt.text(fmt.hbold("Передать клиенту до: "), str(complete_time)),
         fmt.text(fmt.hbold("Позиций: "), len(order["products"])),
         fmt.text(fmt.hbold("Товаров: "), sum([item["quantity"] for item in order["products"]])),
         fmt.text(fmt.hstrikethrough("-" * 20)),
@@ -211,6 +179,7 @@ async def send_info_msg(order, in_process_at, shipment_date, seller, title, curr
         fmt.text(fmt.hstrikethrough("-" * 20)),
         fmt.text(fmt.hbold("Покупатель: "), fmt.hitalic(order["customer"]["name"])),
         fmt.text(fmt.hbold("Тел. покупателя: "), fmt.hcode(f"+{order['customer']['phone']}\n")),
+        fmt.text(fmt.hbold("Коментарий: "), order['customer']['address']['comment']),
         sep="\n")
 
     await dp.bot.send_message(chat_id="-701659745" if DEBUG else seller["log_chat_id"],

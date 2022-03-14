@@ -1,11 +1,11 @@
 import logging
 import requests
 
-from loader import dp
 from data.config import API_URL, DEBUG, MODER_LOGS
 from data.condition import API_METHODS, CANCELLATION_STATUS
-from utils.db_api.database import db_query
+from utils.db import sql
 from utils.proccess_time import get_time
+from utils.message import send_msg
 
 
 async def check_status(response):
@@ -31,15 +31,12 @@ async def check_status(response):
 
 async def post(args, tg_id: int):
     if DEBUG:
-        await dp.bot.send_message(chat_id=MODER_LOGS, text=str(args))
+        await send_msg(MODER_LOGS, str(args))
         return []
     else:
-        api = await db_query(func='fetch',
-                             sql="""SELECT * FROM api 
-                                            WHERE seller_id = (SELECT seller_id FROM employee WHERE tg_id = $1);""",
-                             kwargs=[tg_id])
-        response = requests.post(**args, headers={'Client-Id': str(api[0][0]['seller_id']),
-                                                  'Api-Key': api[0][0]['api_key']})
+        api = await sql.get_special_seller_api_info(tg_id)
+        response = requests.post(**args, headers={'Client-Id': str(api['seller_id']),
+                                                  'Api-Key': api['api_key']})
         if await check_status(response):
             result = response.json()
             return result['result']
@@ -47,11 +44,9 @@ async def post(args, tg_id: int):
 
 async def get_warehouses_list(seller_id, api_key):
     """
-    [
-     {'warehouse_id': 22551110574000,
+    [{'warehouse_id': 22551110574000,
       'name': 'Ozon Express Томск',
-      'is_rfbs': True}
-    ]
+      'is_rfbs': True}]
     """
     params = {'url': API_URL + API_METHODS['v1']}
     response = requests.post(**params, headers={'Client-Id': str(seller_id), 'Api-Key': api_key})
@@ -136,10 +131,10 @@ async def get_orders_list(tg_id: int):
     return await post(params, tg_id)
 
 
-async def cancel_order(posting_number, tg_id, cancel_reason_id):
+async def cancel_order(posting_number: str, tg_id: int, cancel_reason_id: int, cancel_msg: str = None):
     param = {'url': API_URL + API_METHODS['v13'],
              'json': {"cancel_reason_id": cancel_reason_id,
-                      "cancel_reason_message": CANCELLATION_STATUS[cancel_reason_id],
+                      "cancel_reason_message": cancel_msg if cancel_msg else CANCELLATION_STATUS[cancel_reason_id],
                       "posting_number": posting_number}}
     return await post(param, tg_id)
 
@@ -195,7 +190,7 @@ async def complete_packaging_ozon(products, tg_id):
             param['json']["products"].append({"product_id": product["sku"],
                                               "quantity": product["fact_quantity"]})
 
-    await cancel_order(posting_number, tg_id, 352) if count == 0 else False
+    cancel_status = await cancel_order(posting_number, tg_id, 352) if count == 0 else False
 
     if param_for_cancel["items"]:
         status = await delete_products(param_for_cancel, tg_id)
@@ -204,12 +199,14 @@ async def complete_packaging_ozon(products, tg_id):
     else:
         status = False
 
+    await send_weight(posting_number, tg_id, products)
+
     await post(param, tg_id) if count != 0 else False
 
-    return status, posting_number
+    return status, cancel_status, posting_number
 
 
-async def start_delivery(tg_id, posting_numbers):
+async def start_delivery_api(tg_id, posting_numbers):
     param = {'url': API_URL + API_METHODS['v9'],
              'json': {'posting_number': posting_numbers}}
     return await post(param, tg_id)
@@ -224,6 +221,20 @@ async def start_delivery_last_mile(tg_id, posting_numbers):
 async def complete_delivery_ozon(tg_id, posting_number):
     param = {'url': API_URL + API_METHODS['v12'],
              'json': {'posting_number': [posting_number]}}
+    return await post(param, tg_id)
+
+
+async def send_weight(posting_number: str, tg_id: int, products: list):
+    items = []
+    for product in products:
+        if product["weight"]:
+            items.append({"quantity": product["fact_quantity"],
+                          "sku": product["sku"],
+                          "weightAdjust": True,
+                          "weightReal": [product["weight"] / 1000]})
+    param = {'url': API_URL + API_METHODS['v16'],
+             'json': {"items": items,
+                      'posting_number': [posting_number]}}
     return await post(param, tg_id)
 
 

@@ -1,7 +1,7 @@
 import uuid
 
 from data.config import BOT_NAME
-from utils.db_api.database import db_query
+from utils.db.database import db_query
 from utils.proccess_time import get_time
 from data.condition import FUNCTION, USERS_STATE
 

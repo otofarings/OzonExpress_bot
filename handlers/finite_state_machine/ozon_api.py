@@ -4,14 +4,15 @@ from aiogram.types import Message
 from loader import dp
 from states import fsm
 from keyboards.inline import creator, moderator
-from utils.db_api import extra
+from utils.message import del_msg
+from utils.db import sql
 from utils.ozon_express_api.request import get_warehouses_list
 
 
 async def start_create_new_seller(chat_id: int, callback: dict, state):
     await fsm.NewSeller.town.set()
 
-    msg_id = await extra.get_last_msg(chat_id)
+    msg_id = await sql.get_last_msg(chat_id)
 
     func = creator.get_api_create_back_menu if callback['@'] == 'creator' else moderator.get_api_create_back_menu
     back_button = await func()
@@ -34,7 +35,7 @@ async def new_seller_id(msg: Message, state: FSMContext):
                                    reply_markup=back_button,
                                    chat_id=msg.chat.id,
                                    message_id=msg_id)
-    await extra.del_msg(msg)
+    await del_msg(msg)
 
 
 @dp.message_handler(state=fsm.NewSeller.seller_id)
@@ -46,11 +47,11 @@ async def new_api_key(msg: Message, state: FSMContext):
                                    reply_markup=back_button,
                                    chat_id=msg.chat.id,
                                    message_id=msg_id)
-    await extra.del_msg(msg)
+    await del_msg(msg)
 
 
 @dp.message_handler(state=fsm.NewSeller.api_key)
-async def finish_create_new_seller(msg: Message, state: FSMContext):
+async def new_time_zone(msg: Message, state: FSMContext):
     async with state.proxy() as data:
         data['api_key'], back_button, msg_id = msg.text, data['button'], int(data['msg_id'])
     await fsm.NewSeller.next()
@@ -58,11 +59,11 @@ async def finish_create_new_seller(msg: Message, state: FSMContext):
                                    reply_markup=back_button,
                                    chat_id=msg.chat.id,
                                    message_id=msg_id)
-    await extra.del_msg(msg)
+    await del_msg(msg)
 
 
 @dp.message_handler(state=fsm.NewSeller.timezone)
-async def finish_create_new_seller(msg: Message, state: FSMContext):
+async def new_seller_tg_chat(msg: Message, state: FSMContext):
     async with state.proxy() as data:
         data['timezone'], back_button, msg_id = msg.text, data['button'], int(data['msg_id'])
 
@@ -71,7 +72,7 @@ async def finish_create_new_seller(msg: Message, state: FSMContext):
                                    reply_markup=back_button,
                                    chat_id=msg.chat.id,
                                    message_id=msg_id)
-    await extra.del_msg(msg)
+    await del_msg(msg)
 
 
 @dp.message_handler(state=fsm.NewSeller.log_chat_id)
@@ -79,18 +80,18 @@ async def finish_create_new_seller(msg: Message, state: FSMContext):
     async with state.proxy() as data:
         data['log_chat_id'], inviter, msg_id = msg.text, data['inviter'], int(data['msg_id'])
         data['warehouse_id'] = await get_warehouses_list(data["seller_id"], data["api_key"])
-        await extra.create_new_api(data)
+        await sql.create_new_api(data)
     func = creator.get_api_sellers_menu if inviter == 'creator' else moderator.get_api_sellers_menu
     await dp.bot.edit_message_text(**await func(),
                                    chat_id=msg.chat.id,
                                    message_id=msg_id)
     await state.finish()
-    await extra.del_msg(msg)
+    await del_msg(msg)
 
 
 async def start_update_api_key(chat_id: int, callback: dict, state):
     await fsm.NewAPIKey.new_api_key.set()
-    msg_id = await extra.get_last_msg(chat_id)
+    msg_id = await sql.get_last_msg(chat_id)
     async with state.proxy() as data:
         data['seller'], data['item'] = callback['seller'], callback['item']
         data['chat_id'], data['msg_id'] = chat_id, msg_id
@@ -104,9 +105,9 @@ async def start_update_api_key(chat_id: int, callback: dict, state):
 async def finish_update_api_key(msg: Message, state: FSMContext):
     async with state.proxy() as data:
         callback = data
-    await extra.update_api_key(msg.text, int(callback['seller']))
+    await sql.update_api_key(str(msg.text), int(callback['seller']))
     await dp.bot.edit_message_text(**await creator.get_api_seller_menu(callback),
                                    chat_id=msg.chat.id,
                                    message_id=int(callback['msg_id']))
     await state.finish()
-    await extra.del_msg(msg)
+    await del_msg(msg)

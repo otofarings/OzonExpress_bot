@@ -7,9 +7,9 @@ from data.condition import FUNCTION
 from loader import dp
 from data.config import CREATORS
 from keyboards.inline import creator
-from utils.db_api.orders import get_orders
-from utils.db_api.users import del_user
-from utils.db_api import extra
+from utils.db.orders import get_orders
+from utils.db.users import del_user
+from utils.db import extra
 from handlers.finite_state_machine.ozon_api import start_create_new_seller, start_update_api_key
 from handlers.finite_state_machine.employee import start_create_new_user
 

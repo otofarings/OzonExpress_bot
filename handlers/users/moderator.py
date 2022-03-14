@@ -9,9 +9,8 @@ from handlers.finite_state_machine.employee import start_create_new_user
 from handlers.finite_state_machine.ozon_api import start_create_new_seller
 from keyboards.inline import moderator
 from loader import dp
-from utils.db_api import extra
-from utils.db_api.message import update_msg, del_msg
-from utils.db_api.users import del_user
+from utils.message import update_msg, del_msg
+from utils.db.users import del_user
 from states.fsm import check_state
 
 

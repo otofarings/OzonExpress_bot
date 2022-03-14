@@ -1,9 +1,8 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.utils.callback_data import CallbackData
 
-from utils.db_api.database import db_query
-from utils.db_api.users import get_user_info
-from utils.db_api import extra
+from utils.db.database import db_query
+from utils.db.users import get_user_info
 
 
 callback_data = CallbackData('moderator', 'menu', 'level', 'seller', 'option', 'item', 'item_id', 'action')

@@ -5,7 +5,7 @@ from aiogram.types import Message
 from aiogram.utils.exceptions import MessageCantBeDeleted, MessageToDeleteNotFound
 
 from states.fsm import PreviousMenu
-from utils.db_api.database import db_query
+from utils.db.database import db_query
 
 
 # ****************************************Message****************************************

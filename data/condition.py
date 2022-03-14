@@ -1,70 +1,55 @@
-
-USERS_STATE = {
-    'unknown': 'неизвестный',
-    'awaiting_activating': 'ожидает активации',
-    'activated': 'активирован',
-    'removed': 'удален',
-}
+from aiogram.utils.callback_data import CallbackData
 
 FUNCTION = {
-    'creator': 'создатель',
+    'courier':   'курьер',
+    'packer':    'сборщик',
+    'admin':     'админ',
     'moderator': 'модератор',
-    'admin': 'админ',
-    'collector': 'сборщик',
-    'courier': 'курьер',
+    'creator':   'создатель',
 }
 
+USERS_STATE = {
+    'unknown':             'неизвестный',
+    'awaiting_activating': 'ожидает активации',
+    'activated':           'активирован',
+    'removed':             'удален',
+}
 
-EMPLOYEE_ACTION = {
-    'started shift': 'начал смену',
-    'finished shift': 'завершил смену',
+EMPLOYEE_STATUS = {
+    'on_shift':      'на смене',
+    'not_on_shift':  'не на смене',
+    'providing_geo': 'предоставляет геоданные',
 
-    'started assembly': 'начал сборке',
-    'canceled assembly': 'отменил сборку',
-    'completed assembly': 'завершил сборку',
-
-    'assignment order': 'назначение заказов',
-    'assigned order': 'заказ назначен',
-    'canceled assignment': 'отмена назначения',
-
-    'picked order': 'забрал заказ со склада',
-    'delivered order': 'доставил заказ',
-    'undelivered order': 'не доставил заказ',
-    'comes back': 'возвращается на склад',
-    'returned order': 'вернул заказ на склад',
+    'reserving':     'выбирает',
+    'packaging':     'собирает',
+    'delivering':    'доставляет',
+    'returns':       'возвращается',
+    'cancelling':    'отменяет'
 }
 
 ORDER_STATUS = {
-    'awaiting packaging': 'ожидает сборки',
-    'started packaging': 'собирается',
-    'finished packaging': 'собран',
-    'canceled packaging': 'не собран',
-    'partially packaging': 'частично собран',
+    'awaiting_packaging':      'ожидает упаковки',
+    'packaging':               'собирается',
+    'canceled_packaging':      'не собран',
+    'partially_packaging':     'частично собран',
 
-    'awaiting deliver': 'ожидает отгрузки',
-    'awaiting picking': 'ожидает отгрузки',
-    'started delivering': 'доставляется',
-    'finished delivering': 'условно доставлен',
-    'seller_canceled delivering': 'отменен продавцом',
-    'customer_canceled delivering': 'отменен покупателем',
-    'returned back': 'возвращен на склад',
+    'awaiting_deliver':        'ожидает отгрузки',
+    'delivering':              'доставляется',
+    'conditionally_delivered': 'условно доставлен',
+    'cancelled':               'отменен'
 }
 
-ORDER_STATE = {
-    'awaiting_packaging': 'Ожидает сборки',
-    'reserved_by_packer': 'Ожидает сборки',
-    'packaging': 'Собирается',
-    'awaiting_deliver': 'Ожидает отгрузки',
-    'reserved_by_deliver': 'Ожидает отгрузки',
-    'delivering': 'Доставляется',
-    'cancelled': 'Отмененен',
-    'delivered': 'Доставлен',
-    'acceptance_in_progress': 'Идёт приёмка',
-    'awaiting_approve': 'Ожидает подтверждения',
-    'arbitration': 'Арбитраж',
-    'client_arbitration': 'Клиентский арбитраж доставки',
-    'not_accepted': 'Не принят на сортировочном центре',
-    'conditionally_delivered': 'Условно доставлен'
+ORDER_STATUS_API = {
+    'acceptance_in_progress': 'идёт приёмка',
+    'awaiting_approve':       'ожидает подтверждения',
+    'awaiting_packaging':     'ожидает упаковки',
+    'not_accepted':           'не принят на сортировочном центре',
+    'arbitration':            'арбитраж',
+    'client_arbitration':     'клиентский арбитраж доставки',
+    'awaiting_deliver':       'ожидает отгрузки',
+    'delivering':             'доставляется',
+    'delivered':              'доставлено',
+    'cancelled':              'отменен'
 }
 
 CANCELLATION_STATUS = {
@@ -134,4 +119,13 @@ API_METHODS = {
     # Возвращет список причин отмены отправлений.
     'v15': '/v2/posting/fbs/cancel-reason/list',
 
+    # Добавить вес для весовых товаров в отправлении
+    'v16': '/v2/posting/fbs/product/change'
+
+}
+
+CALLBACK = {
+    "courier": CallbackData("courier", "menu", "level", "option", "item", "item_id", "action"),
+    "packer":  CallbackData("packer", "menu", "level", "option", "item", "item_id", "action"),
+    "admin":   CallbackData("admin", "menu", "level", "option", "item", "item_id", "action")
 }

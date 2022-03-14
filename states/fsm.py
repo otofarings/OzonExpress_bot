@@ -40,12 +40,6 @@ class CancelReason(StatesGroup):
     reason = State()
 
 
-class DeliveringOrder(StatesGroup):
-    get_orders = State()
-    delivery = State()
-    back = State()
-
-
 class Geo(StatesGroup):
     geo = State()
 
@@ -53,6 +47,54 @@ class Geo(StatesGroup):
 class PreviousMenu(StatesGroup):
     back_menu = State()
     geo = State()
+    cancel = State()
+    special_cancel = State()
+    weight = State()
+
+
+async def save_fsm_data(state: FSMContext, action: str = None, data_: list = None, status: str = None, text: str = None,
+                        reply_markup=None, posting_number: str = None, menu: str = None,
+                        sku: str = None, order_description: str = None) -> None:
+    async with state.proxy() as data:
+        if action:
+            data['action'] = action
+        if data_:
+            data['data_'] = data_
+        if status:
+            data['status'] = status
+        if posting_number:
+            data['posting_number'] = posting_number
+        if menu:
+            data['menu'] = menu
+        if order_description:
+            data['order_description'] = order_description
+        if text:
+            data['text'] = text
+        if reply_markup:
+            data['reply_markup'] = reply_markup
+        if sku:
+            data['sku'] = sku
+        print(data if data else "NO")
+
+    return
+
+
+async def get_fsm_data(state: FSMContext, args: list) -> dict:
+    fsm_data = {}
+    async with state.proxy() as data:
+        for arg in args:
+            fsm_data[arg] = data[arg]
+    print(fsm_data)
+    print("ok")
+    return fsm_data
+
+
+async def get_previous_menu(state: FSMContext):
+    fsm_data = {}
+    async with state.proxy() as data:
+        fsm_data['reply_markup'] = data['reply_markup']
+        fsm_data['text'] = data['text']
+    return fsm_data
 
 
 if __name__ == '__main__':

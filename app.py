@@ -3,29 +3,23 @@ import logging
 
 from loader import dp, bot
 import middlewares, filters, handlers
-from utils.db_api.tables import create_tables
-from utils.notifications import send_message_to_logs
-from utils.db_api.database import db_query
-from data.config import DEBUG
-from polling import start_polling
-
-logger = logging.getLogger(__name__)
+from utils.db.database import start_sql_bd
+from utils.message import send_message_to_logs
+from polling import start_polling_api
 
 
 async def main():
-    await db_query(dir_func=create_tables)
+    await start_sql_bd()
 
-    if not DEBUG:
-        await send_message_to_logs(dp, start_up=True)
-        await start_polling()
+    await start_polling_api()
+    await send_message_to_logs(start_up=True)
 
     try:
         await dp.skip_updates()
         await dp.start_polling()
 
     finally:
-        if not DEBUG:
-            await send_message_to_logs(dp, turn_off=True)
+        await send_message_to_logs(turn_off=True)
 
         await dp.storage.close()
         await dp.storage.wait_closed()
@@ -37,4 +31,4 @@ if __name__ == '__main__':
         asyncio.run(main())
 
     except (KeyboardInterrupt, SystemExit):
-        logger.error("Бот остановлен!")
+        logging.error("Бот остановлен!")

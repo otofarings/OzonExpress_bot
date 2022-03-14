@@ -2,7 +2,7 @@ import math
 
 from data.config import MAX_DISTANCE
 from data.condition import CANCELLATION_STATUS
-from utils.db_api.database import db_query
+from utils.db.database import db_query
 from utils.proccess_time import get_time
 
 

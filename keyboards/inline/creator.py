@@ -1,10 +1,10 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.callback_data import CallbackData
 
-from data.condition import ORDER_STATE
-from utils.db_api.users import get_users, get_user_info
-from utils.db_api.orders import get_orders_info
-from utils.db_api import extra
+from data.condition import ORDER_STATUS
+from utils.db.users import get_users, get_user_info
+from utils.db.orders import get_orders_info
+from utils.db import extra
 
 
 callback_data = CallbackData('creator', 'menu', 'level', 'seller', 'option', 'item', 'item_id', 'action')
@@ -183,7 +183,7 @@ async def get_order_state_menu(callback):
     markup = InlineKeyboardMarkup()
     text = 'Меню управления Ozon Express\nВыберите статус заказа:'
 
-    for item, key in ORDER_STATE.items():
+    for item, key in ORDER_STATUS.items():
         markup.row(await create_button(key, ['ozon', '5', callback['seller'], callback['option'], item, '0', 'open']))
     markup.row(await create_button('Назад', ['ozon', '3', callback['seller'], '0', '0', '0', 'back']))
 
