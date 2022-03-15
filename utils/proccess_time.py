@@ -46,5 +46,5 @@ async def change_dt_api_format(time_to_edit, tz):
 
 
 async def get_predict_time_for_delivery(time_to_edit, n: int):
-    result_time = time_to_edit + timedelta(hours=n)
+    result_time = time_to_edit + timedelta(minutes=n)
     return result_time

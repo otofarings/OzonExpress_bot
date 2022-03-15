@@ -20,14 +20,13 @@ async def start_polling_api():
             asyncio.create_task(main())
 
         except Exception as e:
-            print(e)
+            logging.error(e)
 
 
 async def main():
     while True:
-        await asyncio.sleep(5)
-
         try:
+            await asyncio.sleep(5)
             for seller in await sql.get_seller_api_info():
                 await check_response(await get_api_response(seller), seller)
 
@@ -120,7 +119,7 @@ async def check_response(response, seller):
                             break
 
             except TypeError as e:
-                logging.info(f"ERROR - {e}")
+                logging.info(f"ERROR - Getting order - {e}")
 
     return
 
@@ -138,7 +137,7 @@ async def change_order(order, seller, new: bool = False, cancel: bool = False, s
             await sql.create_new_products(order)
 
     except TypeError:
-        logging.info(f"ERROR - {TypeError}")
+        logging.info(f"ERROR - Changing order - {TypeError}")
         complete = False
 
     finally:

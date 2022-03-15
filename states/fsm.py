@@ -74,7 +74,6 @@ async def save_fsm_data(state: FSMContext, action: str = None, data_: list = Non
             data['reply_markup'] = reply_markup
         if sku:
             data['sku'] = sku
-        print(data if data else "NO")
 
     return
 
@@ -84,8 +83,6 @@ async def get_fsm_data(state: FSMContext, args: list) -> dict:
     async with state.proxy() as data:
         for arg in args:
             fsm_data[arg] = data[arg]
-    print(fsm_data)
-    print("ok")
     return fsm_data
 
 
