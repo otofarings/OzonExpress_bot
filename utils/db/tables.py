@@ -94,6 +94,16 @@ logs_status_changes = """CREATE TABLE IF NOT EXISTS logs_status_changes
                           latitude           FLOAT,
                           longitude          FLOAT);"""
 
+logs_errors = """CREATE TABLE IF NOT EXISTS logs_errors
+                 (id                 SERIAL PRIMARY KEY,
+                  date               TIMESTAMP,
+                  error_name         TEXT,
+                  type               TEXT,
+                  user_id            BIGINT,
+                  posting_number     TEXT,
+                  warehouse_id       BIGINT,
+                  description        TEXT);"""
+
 
 order_list = """CREATE TABLE IF NOT EXISTS order_list 
                 (id             SERIAL PRIMARY KEY,

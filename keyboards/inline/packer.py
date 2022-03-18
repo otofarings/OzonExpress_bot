@@ -17,11 +17,11 @@ async def get_level_1(function: str, status: str) -> dict:
 
     if status in ["on_shift", "reserve_package", "packaging"]:
         buttons = [{"Сборка отправления": ["package", "2", "0", "0", "0", "open"]},
-                   {"Информация":         ["main", "1", "0", "0", "0", "pass"]},
+                   {"Информация":         ["info", "1", "0", "0", "0", "open"]},
                    {"Завершить смену":    ["main", "1", "0", "0", "0", "finish"]}]
     else:
         buttons = [{"Начать смену": ["main", "1", "0", "0", "0", "start"]},
-                   {"Информация":   ["main", "1", "0", "0", "0", "pass"]},
+                   {"Информация":   ["info", "1", "0", "0", "0", "open"]},
                    {"Выйти":        ["main", "0", "0", "0", "0", "close_bot"]}]
 
     return {"text": fmt.text(*text, sep="\n"), "reply_markup": await create_inline_keyboard(function, buttons)}
@@ -140,7 +140,6 @@ async def get_level_5(function: str, cll: CallbackQuery = None, args: list = Non
         product_name = await format_product_name(ind, order['name'])
 
         weight = order["weight"] if order["weight"] else "0"
-        print(weight)
 
         buttons.append({product_name:         ["package", "6", order["sku"], weight, posting_number, "open"]})
         if weight != "0":

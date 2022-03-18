@@ -3,6 +3,7 @@ from . import moderator
 from . import admin
 from . import packer
 from . import courier
+from . import information
 
 
 async def change_func(function: str):

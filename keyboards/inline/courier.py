@@ -17,11 +17,11 @@ async def get_level_1(function: str, status: str) -> dict:
 
     if status in ["on_shift", "reserve_delivery", "delivering"]:
         buttons = [{"Доставка отправлений": ["delivery", "2", "0", "0", "0", "open"]},
-                   {"Информация":           ["main", "1", "0", "0", "0", "pass"]},
+                   {"Информация":           ["info", "1", "0", "0", "0", "open"]},
                    {"Завершить смену":      ["main", "1", "0", "0", "0", "finish"]}]
     else:
         buttons = [{"Начать смену": ["main", "1", "0", "0", "0", "start"]},
-                   {"Информация":   ["main", "1", "0", "0", "0", "pass"]},
+                   {"Информация":   ["info", "1", "0", "0", "0", "open"]},
                    {"Выйти":        ["main", "0", "0", "0", "0", "close_bot"]}]
 
     return {"text": fmt.text(*text, sep="\n"), "reply_markup": await create_inline_keyboard(function, buttons)}

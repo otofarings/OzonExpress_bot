@@ -7,10 +7,10 @@ import logging
 
 from loader import dp
 from utils.db import sql
-from data.condition import ORDER_STATUS_API, API_METHODS
+from data.condition import ORDER_STATUS_API, API_METHODS, OZON_ORDER_FIELDS
 from data.config import API_URL, USER_AGENT, DEBUG
-from utils.message import cancel_action_message
-from utils.proccess_time import get_time, change_dt_api_format, get_predict_time_for_delivery
+from utils.message import cancel_action_message, alert_logs, alert_seller_logs
+from utils.proccess_time import get_time, change_dt_api_format, get_predict_time_for_delivery, check_error_time
 
 
 async def start_polling_api():
@@ -21,6 +21,8 @@ async def start_polling_api():
 
         except Exception as e:
             logging.error(e)
+            await alert_logs("9")
+            await sql.write_error_log(str(e), error_type="Exception")
 
 
 async def main():
@@ -31,15 +33,28 @@ async def main():
                 await check_response(await get_api_response(seller), seller)
 
         except asyncio.CancelledError:
-            logging.info('Завершение опроса API')
+            logging.info('Выход из процесса опроса API')
+            await alert_logs("10")
+            await sql.write_error_log(str(asyncio.CancelledError), error_type="CancelledError")
             return False
 
         except ConnectionError:
             logging.error(ConnectionError)
+            await alert_logs("11")
+            await sql.write_error_log(str(ConnectionError), error_type="ConnectionError")
             await asyncio.sleep(15)
 
         except ContentTypeError:
             logging.error(ContentTypeError)
+            await alert_logs("12")
+            await sql.write_error_log(str(ContentTypeError), error_type="ContentTypeError")
+            await asyncio.sleep(5)
+
+        except TypeError:
+            logging.error(ContentTypeError)
+            await alert_logs("13")
+            await sql.write_error_log(str(ContentTypeError), error_type="ContentTypeError")
+            await asyncio.sleep(5)
 
 
 async def get_api_response(seller):
@@ -49,21 +64,59 @@ async def get_api_response(seller):
                 async with session.post(**await get_unfulfilled_list(seller)) as response:
                     try:
                         result = await response.json()
-                        result = result["result"]["postings"]
+                        if result:
+                            if result["result"]:
+                                if result["result"]["postings"]:
+                                    result = result["result"]["postings"]
+                                else:
+                                    await alert_logs("2")
+                            else:
+                                await alert_logs("2")
+                        else:
+                            await alert_logs("1")
 
                     except ContentTypeError:
                         logging.error(ContentTypeError)
+                        await sql.write_error_log(str(ContentTypeError), seller["timezone"],
+                                                  error_type="ContentTypeError", warehouse_id=seller["warehouse_id"])
                         result = []
 
                     finally:
                         return result
 
-            except (TimeoutError, ValueError) as error_1:
-                logging.error(error_1)
+            except TimeoutError:
+                logging.error(TimeoutError)
+                await alert_logs("4")
+                await sql.write_error_log(str(TimeoutError), seller["timezone"],
+                                          error_type="TimeoutError", warehouse_id=seller["warehouse_id"])
                 await asyncio.sleep(15)
 
-    except (ServerDisconnectedError, ClientResponseError, ClientConnectorError) as error_2:
-        logging.error(error_2)
+            except ValueError:
+                logging.error(ValueError)
+                await sql.write_error_log(str(ValueError), seller["timezone"],
+                                          error_type="ValueError", warehouse_id=seller["warehouse_id"])
+                await alert_logs("5")
+                await asyncio.sleep(15)
+
+    except ServerDisconnectedError:
+        logging.error(ServerDisconnectedError)
+        await alert_logs("6")
+        await sql.write_error_log(str(ServerDisconnectedError), seller["timezone"],
+                                  error_type="ServerDisconnectedError", warehouse_id=seller["warehouse_id"])
+        await asyncio.sleep(15)
+
+    except ClientResponseError:
+        logging.error(ClientResponseError)
+        await alert_logs("7")
+        await sql.write_error_log(str(ClientResponseError), seller["timezone"],
+                                  error_type="ClientResponseError", warehouse_id=seller["warehouse_id"])
+        await asyncio.sleep(15)
+
+    except ClientConnectorError:
+        logging.error(ClientConnectorError)
+        await alert_logs("8")
+        await sql.write_error_log(str(ClientConnectorError), seller["timezone"],
+                                  error_type="ClientConnectorError", warehouse_id=seller["warehouse_id"])
         await asyncio.sleep(15)
 
 
@@ -118,8 +171,20 @@ async def check_response(response, seller):
 
                             break
 
-            except TypeError as e:
-                logging.info(f"ERROR - Getting order - {e}")
+            except TypeError:
+                logging.info(f"ERROR - Getting order - {TypeError}")
+                await alert_logs("13")
+                await sql.write_error_log(str(TypeError),
+                                          seller["timezone"], error_type="TypeError",
+                                          warehouse_id=seller["warehouse_id"],
+                                          posting_number=order_info["posting_number"])
+
+                # Сообщение для Франчайзи
+                error_info = await sql.get_first_time_error(order_info["posting_number"], seller["warehouse_id"])
+                if await check_error_time(error_info, seller["timezone"]):
+                    await alert_seller_logs(order_info["posting_number"])
+
+                await asyncio.sleep(15)
 
     return
 
@@ -138,6 +203,7 @@ async def change_order(order, seller, new: bool = False, cancel: bool = False, s
 
     except TypeError:
         logging.info(f"ERROR - Changing order - {TypeError}")
+        await alert_logs("14")
         complete = False
 
     finally:
@@ -183,6 +249,26 @@ async def send_info_msg(order, in_process_at, shipment_date, seller, title, curr
 
     await dp.bot.send_message(chat_id="-701659745" if DEBUG else seller["log_chat_id"],
                               text=fmt.text(title, fmt.hitalic(str(current_time)[:-7]), text, sep="\n\n"))
+
+
+async def check_new_order(order_info: dict):
+    result = {"correct": [],
+              "incorrect": []}
+
+    for field in OZON_ORDER_FIELDS:
+        result = await check_field(result, order_info, field)
+
+
+async def check_field(dct: dict, order_info: dict, field: list):
+    if field[0] in order_info:
+        if order_info[field[0]] is not None:
+            if len(field) > 1:
+                if field[0] in order_info:
+                    pass
+        else:
+            return dct["incorrect"].append(" ".join(field))
+    else:
+        return dct["incorrect"].append(" ".join(field))
 
 
 if __name__ == "__main__":

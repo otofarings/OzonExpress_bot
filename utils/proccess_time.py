@@ -23,6 +23,20 @@ async def get_time(n=None, minus: bool = False, plus: bool = False, tz: str = No
     return result_time.replace(tzinfo=None) if tz else result_time
 
 
+async def check_error_time(error_info, tz: str) -> bool:
+    dif_sec = (await get_time(tz=tz) - error_info["date"]).seconds
+    if (dif_sec / 60 > 1) and (error_info["count"] > 5):
+        return True
+    elif (dif_sec / 60 > 5) and (error_info["count"] > 25):
+        return True
+    elif (dif_sec / 60 > 10) and (error_info["count"] > 50):
+        return True
+    elif (dif_sec / 60 > 30) and (error_info["count"] > 150):
+        return True
+    else:
+        return False
+
+
 async def change_dt_format(time_to_edit):
     return datetime.strptime(time_to_edit, TIME_FORMAT)
 

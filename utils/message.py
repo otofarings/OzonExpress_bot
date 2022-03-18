@@ -6,6 +6,7 @@ from aiogram.utils.exceptions import MessageCantBeDeleted, MessageToDeleteNotFou
 
 from loader import dp
 from data.config import MODER_LOGS
+from data.condition import ALERT_LOGS
 from utils.db import sql
 from utils.proccess_time import get_time
 from utils.status import change_status
@@ -29,6 +30,21 @@ async def send_msg(recipient, text):
     await dp.bot.send_message(chat_id=recipient, text=text)
 
 
+async def alert_logs(alert_num: str) -> None:
+    await send_msg(MODER_LOGS, ALERT_LOGS[alert_num])
+    return
+
+
+async def alert_seller_logs(posting_number) -> None:
+    alert_text = fmt.text(fmt.hbold("❗Внимание❗"),
+                          fmt.text("Наблюдаются", fmt.hbold("технические проблемы с получением данных"),
+                                   "заказа", fmt.hcode(posting_number)),
+                          fmt.text("Попробуйте изменить его статус в личном кабинете"),
+                          sep="\n")
+    await dp.bot.send_message(chat_id="-701659745", text=alert_text)
+    return
+
+
 async def cancel_action_message(posting_number):
     order_info = await sql.get_order_info_for_cancelling(posting_number)
     employee_info = {}
@@ -36,7 +52,7 @@ async def cancel_action_message(posting_number):
     if order_info["finish_delivery_date"] is None:
         if order_info["start_delivery_date"] is not None:
             pass
-            # employee_info = await sql.get_employee_info_to_edit_msg(order_info["deliver_id"])
+            employee_info = await sql.get_employee_info_to_edit_msg(order_info["deliver_id"])
 
         elif order_info["finish_package_date"] is None:
             if order_info["start_package_date"] is not None:

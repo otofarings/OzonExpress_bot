@@ -1,5 +1,6 @@
 from . import start_command
 from . import geo
+from . import information
 from . import cancel_posting
 from . import creator
 from . import moderator

@@ -473,6 +473,32 @@ async def log_entry(new_obj, btn=None) -> None:
     return
 
 
+# ****************************************logs_errors****************************************
+async def write_error_log(error_name: str, tz: str = "Europe/Moscow", error_type: str = None, user_id: str = None,
+                          posting_number: str = None, warehouse_id: int = None, description: str = None) -> None:
+    await db_query(func='execute',
+                   sql="""INSERT INTO logs_errors 
+                          (date, error_name, type, user_id, posting_number, warehouse_id, description) 
+                          VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9);""",
+                   kwargs=[await get_time(tz=tz), error_name, error_type, user_id,
+                           posting_number, warehouse_id, description])
+    return
+
+
+async def get_first_time_error(posting_number: str, warehouse_id: int):
+    count = await db_query(func='fetch',
+                           sql="""SELECT MIN(date) AS date, COUNT(date)
+                                  FROM logs_errors 
+                                  WHERE posting_number = $1 
+                                  AND warehouse_id = $2 
+                                  AND type = $3
+                                  GROUP BY warehouse_id
+                                  ORDER BY date
+                                  LIMIT 1;""",
+                           kwargs=[posting_number, warehouse_id, "TypeError"])
+    return count[0][0]
+
+
 # ****************************************logs_status_changes****************************************
 
 
