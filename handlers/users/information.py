@@ -1,4 +1,3 @@
-from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.handler import SkipHandler
 from aiogram.types import CallbackQuery
 from aiogram.utils.exceptions import MessageNotModified

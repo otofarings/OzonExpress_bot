@@ -52,7 +52,7 @@ async def cancel_action_message(posting_number):
     if order_info["finish_delivery_date"] is None:
         if order_info["start_delivery_date"] is not None:
             pass
-            employee_info = await sql.get_employee_info_to_edit_msg(order_info["deliver_id"])
+            # employee_info = await sql.get_employee_info_to_edit_msg(order_info["deliver_id"])
 
         elif order_info["finish_package_date"] is None:
             if order_info["start_package_date"] is not None:

@@ -479,7 +479,7 @@ async def write_error_log(error_name: str, tz: str = "Europe/Moscow", error_type
     await db_query(func='execute',
                    sql="""INSERT INTO logs_errors 
                           (date, error_name, type, user_id, posting_number, warehouse_id, description) 
-                          VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9);""",
+                          VALUES($1, $2, $3, $4, $5, $6, $7);""",
                    kwargs=[await get_time(tz=tz), error_name, error_type, user_id,
                            posting_number, warehouse_id, description])
     return

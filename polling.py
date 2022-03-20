@@ -168,6 +168,11 @@ async def check_response(response, seller):
                                     await sql.update_order_last_status(order_info["status"],
                                                                        order_info['posting_number'],
                                                                        seller["timezone"])
+                                elif order_info["status"] == "delivering":
+                                    if exist_order["status"] in ["awaiting_packaging", "packaging", "awaiting_deliver"]:
+                                        await sql.update_order_last_status(order_info["status"],
+                                                                           order_info['posting_number'],
+                                                                           seller["timezone"])
 
                             break
 
@@ -208,10 +213,13 @@ async def change_order(order, seller, new: bool = False, cancel: bool = False, s
 
     finally:
         if new:
-            title = fmt.hitalic("Новый заказ")
+            if order["status"] == "cancelled":
+                title = fmt.hitalic("❗Частичная отмена в заказе❗")
+            else:
+                title = fmt.hitalic("Новый заказ")
 
         elif cancel:
-            title = fmt.hitalic("❗Изменение в заказе❗")
+            title = fmt.hitalic("❗Полная отмена заказа❗")
             await cancel_action_message(order['posting_number'])
 
         else:
