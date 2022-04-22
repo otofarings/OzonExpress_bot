@@ -24,10 +24,10 @@ async def start_create_new_user(chat_id: int, callback: dict, state):
         button_data = [seller_id, 'user', new_func]
         async with state.proxy() as data:
             data['seller_id'] = seller_id
-    back_button = await user.get_user_create_back_menu(*button_data)
+    back_button = await user.get_user_create_back_menu(callback['@'], *button_data)
     async with state.proxy() as data:
         data['new_func'], data['back'], data['msg_id'] = new_func, back_button, msg_id
-    await dp.bot.edit_message_text(text=f'Добавление нового {new_func}а\nВведите ФИО\nПример: Иванов Иван Иванович',
+    await dp.bot.edit_message_text(text=f'Добавление нового {FUNCTION[new_func]}а\nВведите ФИО\nПример: Иванов Иван Иванович',
                                    reply_markup=back_button,
                                    chat_id=chat_id,
                                    message_id=msg_id)

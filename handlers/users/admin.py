@@ -157,17 +157,18 @@ async def open_packer_menu(cll: CallbackQuery, callback_data: dict, function: st
             await cll.message.edit_text(**await packer.get_level_4(function, cll, state), disable_web_page_preview=True)
 
         elif callback_data['level'] == '5':
+            ex_option = False
             if callback_data['action'] == "start_packaging":
                 await save_fsm_data(state, order_description=cll.message.html_text)
-                await packer.start_package(cll, tz)
-
-            await cll.message.edit_text(**await packer.get_level_5(function, cll),
+                await packer.start_package(state, cll, tz)
+                ex_option = True
+            await cll.message.edit_text(**await packer.get_level_5(function, state, cll, first=ex_option),
                                         text=(await get_fsm_data(state, ["order_description"]))["order_description"],
                                         disable_web_page_preview=True)
 
         elif callback_data['level'] == '6':
             await save_fsm_data(state, text=cll.message.html_text)
-            await cll.message.edit_text(**await packer.get_level_6(function, cll))
+            await cll.message.edit_text(**await packer.get_level_6(function, cll, state))
 
         elif callback_data['level'] == '7':
             if callback_data['action'] == 'open':

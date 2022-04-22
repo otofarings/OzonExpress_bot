@@ -19,14 +19,15 @@ async def write_bot_finish_status() -> None:
 
 
 # ****************************************api****************************************
-async def get_seller_api_info() -> list:
+async def get_sellers_api_info() -> list:
     sellers_info = await db_query(func='fetch',
-                                  sql="""SELECT * FROM api;""",
-                                  kwargs=[])
+                                  sql="""SELECT * FROM api
+                                         WHERE status = $1;""",
+                                  kwargs=["active"])
     return sellers_info[0]
 
 
-async def get_special_seller_api_info(tg_id: int) -> dict:
+async def get_api_info(tg_id: int) -> dict:
     api = await db_query(func='fetch',
                          sql="""SELECT * 
                                 FROM api 
@@ -98,7 +99,7 @@ async def get_users_info(tg_id: int, function: str) -> list:
                                       AND warehouse_id IN (SELECT warehouse_id 
                                                            FROM employee 
                                                            WHERE tg_id = $1);""",
-                               kwargs=[tg_id, function, 'удален'])
+                               kwargs=[tg_id, function, 'удален'])  # Исправить
     return user_info[0]
 
 
@@ -110,7 +111,7 @@ async def update_msg(message_id: int, chat_id: int):
                                        RETURNING (SELECT msg_id 
                                                   FROM employee 
                                                   WHERE tg_id = $2 AND state != $3);""",
-                                kwargs=[message_id, chat_id, 'удален'])
+                                kwargs=[message_id, chat_id, 'удален'])  # Исправить
     return old_msg_id[0][0]['msg_id']
 
 
@@ -132,7 +133,7 @@ async def get_last_msg(tg_id: int):
                             sql="""SELECT msg_id 
                                    FROM employee 
                                    WHERE tg_id = $1 AND state != $2;""",
-                            kwargs=[tg_id, 'удален'])
+                            kwargs=[tg_id, 'удален'])  # Исправить
     return msg_id[0][0]['msg_id']
 
 
@@ -221,21 +222,52 @@ async def get_orders_last_day_info(tg_id: int, tz: str) -> list:
 
 async def get_order_info(posting_number: str):
     order_info = await db_query(func='fetch',
-                                sql="""SELECT * 
-                                       FROM order_info 
-                                       WHERE posting_number = $1;""",
+                                sql="""SELECT u.*, count(o.name), sum(o.quantity)
+                                        FROM order_info u, order_list o
+                                        WHERE u.posting_number = o.posting_number 
+                                        AND u.posting_number = $1
+                                        GROUP BY (u.posting_number, u.address, u.shipment_date, 
+                                                  u.in_process_at, u.latitude, u.longitude, 
+                                                  u.customer_name, u.customer_phone, u.customer_comment)
+                                        ORDER BY u.shipment_date""",
                                 kwargs=[posting_number])
-
     return order_info[0][0]
+
+
+async def get_order_info_by_order_number(order_number: str):
+    order_info = await db_query(func='fetch',
+                                sql="""SELECT u.*, count(o.name), sum(o.quantity)
+                                        FROM order_info u, order_list o
+                                        WHERE u.posting_number = o.posting_number 
+                                        AND u.order_number = $1
+                                        GROUP BY (u.posting_number, u.address, u.shipment_date, 
+                                                  u.in_process_at, u.latitude, u.longitude, 
+                                                  u.customer_name, u.customer_phone, u.customer_comment)
+                                        ORDER BY u.shipment_date""",
+                                kwargs=[order_number])
+    return order_info[0][0] if order_info[0] else None
+
+
+async def get_order_msg_id(posting_number: str = None, order_number: str = None):
+    option = "order_number" if order_number else "posting_number"
+    order_info = await db_query(func='fetch',
+                                sql=f"""SELECT message_id
+                                        FROM order_info
+                                        WHERE {option} = $1
+                                        LIMIT 1;""",
+                                kwargs=[order_number if order_number else posting_number])
+    return order_info[0][0]["message_id"]
 
 
 async def get_orders_info_for_polling(warehouse_id: int):
     orders_info = await db_query(func='fetch',
-                                 sql="""SELECT posting_number, status_api, cancel_reason_id, status 
+                                 sql="""SELECT posting_number, status_api, cancel_reason_id, status, 
+                                               start_delivery_date, current_status, order_number
                                         FROM order_info 
                                         WHERE warehouse_id = $1 
+                                        AND in_process_at > $2 
                                         ORDER BY shipment_date;""",
-                                 kwargs=[warehouse_id])
+                                 kwargs=[warehouse_id, (await get_time(36, minus=True))])
     return orders_info[0]
 
 
@@ -276,7 +308,7 @@ async def create_new_order(order: dict, in_process_at, shipment_date, current_ti
                                        ON CONFLICT (posting_number) DO UPDATE
                                        SET status_api = $6, customer_comment = $15, cancel_reason_id = $20, 
                                            cancel_reason = $21, cancellation_type = $22, cancelled_after_ship = $23, 
-                                           affect_cancellation_rating = $24, cancellation_initiator = $25 
+                                           affect_cancellation_rating = $24, cancellation_initiator = $25
                                        RETURNING *)
                           INSERT INTO logs_status_changes 
                           (date, status, status_ozon_seller, posting_number) 
@@ -296,7 +328,25 @@ async def create_new_order(order: dict, in_process_at, shipment_date, current_ti
     return
 
 
-async def update_order_last_status(new_status: str, posting_number: str, tz: str) -> None:
+async def insert_order_message_id(posting_number: str, message_id: int, channel_id: str) -> None:
+    await db_query(func='execute',
+                   sql="""UPDATE order_info 
+                          SET message_channel_id = $2, channel_id = $3
+                          WHERE posting_number = $1;""",
+                   kwargs=[posting_number, message_id, channel_id])
+    return
+
+
+async def insert_message_id(message_id: int, message_channel_id: int) -> None:
+    await db_query(func='execute',
+                   sql="""UPDATE order_info 
+                          SET message_id = $2
+                          WHERE message_channel_id = $1;""",
+                   kwargs=[message_id, message_channel_id])
+    return
+
+
+async def update_order_last_status(new_status: str, posting_number: str, tz: str) -> str:
     await db_query(func='execute',
                    sql="""WITH updated AS (UPDATE order_info 
                                            SET status = $2
@@ -306,7 +356,14 @@ async def update_order_last_status(new_status: str, posting_number: str, tz: str
                           (posting_number, status_ozon_seller, date, status)
                           VALUES($1, $2, $3, $4);""",
                    kwargs=[posting_number, new_status, (await get_time(tz=tz)).replace(tzinfo=None), new_status])
-    return
+
+    status = await db_query(func='fetch',
+                            sql="""SELECT status
+                                   FROM order_info 
+                                   WHERE posting_number = $1
+                                   LIMIT 1;""",
+                            kwargs=[posting_number])
+    return status[0][0]["status"]
 
 
 async def count_orders(tg_id: int, status: str) -> int:
@@ -319,6 +376,18 @@ async def count_orders(tg_id: int, status: str) -> int:
                                                        WHERE tg_id = $1);""",
                            kwargs=[tg_id, status])
     return count[0][0]["count"]
+
+
+async def get_reserved_user(tg_id: int, status: str) -> list:
+    names = await db_query(func='fetch',
+                           sql="""SELECT name 
+                                  FROM employee 
+                                  WHERE status = $2 
+                                  AND warehouse_id IN (SELECT warehouse_id 
+                                                       FROM employee 
+                                                       WHERE tg_id = $1);""",
+                           kwargs=[tg_id, status])
+    return names[0]
 
 
 async def reserve_orders_for_package(tg_id: int) -> list:
@@ -348,7 +417,7 @@ async def reserve_orders_for_package(tg_id: int) -> list:
     return orders_data[0]
 
 
-async def reserve_orders_for_delivery(tg_id: int) -> list:
+async def reserve_orders_for_delivery(tg_id: int, limit: int = None) -> list:
     orders_info = await db_query(func='fetch',
                                  sql="""WITH updated AS (UPDATE order_info 
                                                          SET status = $3, deliver_id = $1 
@@ -360,8 +429,8 @@ async def reserve_orders_for_delivery(tg_id: int) -> list:
                                          SELECT posting_number, address, shipment_date
                                          FROM updated
                                          ORDER BY shipment_date
-                                         LIMIT 5;""",
-                                 kwargs=[tg_id, "awaiting_deliver", 'reserved_by_deliver'])
+                                         LIMIT $4;""",
+                                 kwargs=[tg_id, "awaiting_deliver", 'reserved_by_deliver', limit if limit else 5])
 
     return orders_info[0]
 
@@ -423,11 +492,25 @@ async def cancel_order(posting_number: str, tz: str) -> None:
 
 
 async def start_delivery_order(list_of_orders: list, tg_id: int, tz: str) -> list:
+    already_added = (await db_query(func='fetch',
+                                    sql="""SELECT order_id, posting_number, address, addressee_name, 
+                                                  addressee_phone, customer_comment, shipment_date, 
+                                                  latitude, longitude
+                                           FROM order_info 
+                                           WHERE status = $2 
+                                           AND warehouse_id IN (SELECT warehouse_id 
+                                                                FROM employee 
+                                                                WHERE tg_id = $1)
+                                           AND deliver_id = $1
+                                           AND start_delivery_date > $3;""",
+                                    kwargs=[tg_id, 'delivering',
+                                            (await get_time(1, tz=tz, minus=True)).replace(tzinfo=None)]))[0]
     info = await db_query(func='fetch',
                           sql="""WITH updated AS (UPDATE order_info 
                                                   SET status = $3, start_delivery_date = $5
-                                                  WHERE posting_number = ANY($1 )
-                                                  AND deliver_id = $2 AND status_api = $4
+                                                  WHERE posting_number = ANY($1)
+                                                  AND deliver_id = $2 
+                                                  AND status_api = $4
                                                   RETURNING *)
                                  SELECT order_id, posting_number, address, addressee_name, 
                                         addressee_phone, customer_comment, shipment_date, 
@@ -438,9 +521,10 @@ async def start_delivery_order(list_of_orders: list, tg_id: int, tz: str) -> lis
                                                                         WHERE tg_id = $2);""",
                           kwargs=[tuple(list_of_orders), tg_id, 'delivering', 'awaiting_deliver',
                                   (await get_time(tz=tz)).replace(tzinfo=None)])
-
-    await update_employee_last_status([tg_id, 'delivering' if len(info[0]) > 0 else 'on_shift', await get_time(tz=tz)])
-    return info[0]
+    all_info = list(already_added)
+    all_info.extend(info[0])
+    await update_employee_last_status([tg_id, 'delivering' if len(all_info) > 0 else 'on_shift', await get_time(tz=tz)])
+    return all_info
 
 
 async def complete_posting_delivery(posting_number: str, tg_id: int, tz: str, location: dict, result: str) -> None:
@@ -455,6 +539,15 @@ async def complete_posting_delivery(posting_number: str, tg_id: int, tz: str, lo
                           VALUES($1, $2, $3, $4, $5, $6, $7);""",
                    kwargs=[posting_number, 'delivering', (await get_time(tz=tz)).replace(tzinfo=None), result,
                            tg_id, location['latitude'], location['longitude']])
+    return
+
+
+async def write_current_status(post_: str, current_status: str) -> None:
+    await db_query(func='execute',
+                   sql=f"""UPDATE order_info 
+                           SET current_status = $2
+                           WHERE posting_number = $1;""",
+                   kwargs=[post_, current_status])
     return
 
 
@@ -503,14 +596,19 @@ async def get_first_time_error(posting_number: str, warehouse_id: int):
 
 
 # ****************************************order_list****************************************
-async def create_new_products(order: dict) -> None:
+async def create_new_products(order: dict, products_info: dict) -> None:
     for product in order['products']:
+        extra_info = products_info[str(product['sku'])]
+        barcode = int(extra_info["barcode"] if extra_info["barcode"] else 0)
         await db_query(func='execute',
                        sql="""INSERT INTO order_list 
-                              (order_id, posting_number, sku, name, offer_id, quantity, price, fact_quantity, changed) 
-                              VALUES($1, $2, $3, $4, $5, $6, $7, $6, $8);""",
-                       kwargs=[order['order_id'], order['posting_number'], product['sku'], product['name'],
-                               product['offer_id'], product['quantity'], float(product['price']), False])
+                              (order_id, posting_number, sku, name, offer_id, quantity, price, fact_quantity, changed,
+                               volume_weight, category_id, product_id, barcode, primary_image, rank) 
+                              VALUES($1, $2, $3, $4, $5, $6, $7, $6, $8, $9, $10, $11, $12, $13, $14);""",
+                       kwargs=[order['order_id'], order['posting_number'], int(product['sku']), product['name'],
+                               product['offer_id'], product['quantity'], float(product['price']), False,
+                               extra_info["volume_weight"], extra_info["category_id"], extra_info["product_id"],
+                               barcode, extra_info["primary_image"], extra_info["rank"]])
     return
 
 
@@ -569,6 +667,52 @@ async def save_callback(cll, tz):
                           VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)""",
                    kwargs=[cll.message.chat.id, cll.message.message_id, cll.message.chat.id, cll.message.text,
                            cll.message.entities, cll.message.reply_markup, cll.data, await get_time(tz=tz)])
+
+
+# ****************************************routing****************************************
+async def get_product_rank(category_id: int) -> int:
+    order_info = await db_query(func='fetch',
+                                sql="""SELECT total_rank 
+                                       FROM routing 
+                                       WHERE under_child_category_id = $1
+                                       LIMIT 1;""",
+                                kwargs=[category_id])
+    return order_info[0][0]["total_rank"] if order_info[0] else int(1001001)
+
+
+async def get_product_category_name(rank: int) -> int:
+    order_info = await db_query(func='fetch',
+                                sql="""SELECT child_category_name 
+                                       FROM routing 
+                                       WHERE total_rank = $1
+                                       LIMIT 1;""",
+                                kwargs=[rank])
+    return order_info[0][0]["child_category_name"]
+
+
+# ****************************************tags****************************************
+async def write_tag(order_number: str, tz: str, tag_: str) -> list:
+    result = await db_query(func='fetch',
+                            sql="""WITH src AS (INSERT INTO tags 
+                                                (date, posting_number, hashtag) 
+                                                VALUES($1, $2, $3)
+                                                RETURNING *)
+                                   SELECT hashtag
+                                   FROM tags
+                                   WHERE posting_number = $2;""",
+                            kwargs=[await get_time(tz=tz), order_number, tag_])
+    lst = result[0]
+    return [tag["hashtag"] for tag in lst] if lst else []
+
+
+async def get_tags(order_number: str) -> list:
+    result = await db_query(func='fetch',
+                            sql="""SELECT hashtag 
+                                   FROM tags 
+                                   WHERE posting_number = $1;""",
+                            kwargs=[order_number])
+    lst = result[0]
+    return [tag["hashtag"] for tag in lst] if lst else []
 
 
 if __name__ == '__main__':

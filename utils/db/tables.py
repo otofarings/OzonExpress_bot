@@ -9,7 +9,9 @@ api = """CREATE TABLE IF NOT EXISTS api
           api_key      TEXT,
           seller_name  TEXT,
           timezone     TEXT,
-          log_chat_id  TEXT);"""
+          log_chat_id  TEXT,
+          channel_id   TEXT,
+          status       TEXT);"""
 
 employee = """CREATE TABLE IF NOT EXISTS employee 
               (id            SERIAL,
@@ -33,10 +35,16 @@ order_info = """CREATE TABLE IF NOT EXISTS order_info
                 (posting_number            TEXT PRIMARY KEY,
                  order_id                  BIGINT,
                  order_number              TEXT,
+                 
+                 received_date             TEXT,
+                 message_id                BIGINT,
+                 channel_id                TEXT,
+                 message_channel_id        BIGINT,
                 
                  warehouse_id              BIGINT,
                  status                    TEXT,
                  status_api                TEXT,
+                 current_status            TEXT,
                 
                  address                   TEXT,
                  zip_code                  TEXT,
@@ -116,7 +124,13 @@ order_list = """CREATE TABLE IF NOT EXISTS order_list
                  price          FLOAT,
                  changed        BOOLEAN,
                  fact_quantity  INT,
-                 weight         INT);"""
+                 weight         FLOAT,
+                 volume_weight  FLOAT,
+                 category_id    INT,
+                 product_id     BIGINT,
+                 barcode        BIGINT,
+                 primary_image  TEXT,
+                 rank           INT);"""
 
 employee_stat = """CREATE TABLE IF NOT EXISTS employee_stat 
                    (tg_id         BIGINT PRIMARY KEY,
@@ -141,5 +155,29 @@ fsm = """CREATE TABLE IF NOT EXISTS finite_state_machine
           previous_data TEXT,
           date          TIMESTAMP);"""
 
+routing = """CREATE TABLE IF NOT EXISTS routing 
+             (id                        SERIAL PRIMARY KEY,
+              total_rank                INT,
+              weight                    BOOLEAN,
+              parent_category_id        BIGINT,
+              parent_category_name      TEXT,
+              parent_category_rank      INT,
+              child_category_id         BIGINT,
+              child_category_name       TEXT,
+              child_category_rank       INT,
+              under_child_category_id   BIGINT,
+              under_child_category_name TEXT,
+              under_child_category_rank INT,
+              date_added                TIMESTAMP,
+              date_of_change            TIMESTAMP,
+              deletion_date             TIMESTAMP,
+              date                      TIMESTAMP);"""
+
+tags = """CREATE TABLE IF NOT EXISTS tags
+          (id SERIAL PRIMARY KEY,
+           date TIMESTAMP,
+           posting_number TEXT,
+           hashtag TEXT);"""
+
 tables = [logs_bot_running, api, employee, order_info, logs_button_clicks,
-          logs_status_changes, order_list, employee_stat, customer_stat, fsm]
+          logs_status_changes, order_list, employee_stat, customer_stat, fsm, routing, tags]
