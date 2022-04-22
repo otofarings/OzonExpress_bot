@@ -163,7 +163,7 @@ class Order:
                 text = await order_description(
                     self.info, self.dt_obj["in_process_at"], self.dt_obj["shipment_date"],
                     self.dt_obj["predicted_date"], self.tags, title_=title,
-                    status_="conditionally_delivered" if self.exist_post["status"] == "delivered" else self.info["status"])
+                    status_=self.info["status"])
                 await self.write_msg(text)
 
         elif await self.condition_to_change_status():
@@ -280,6 +280,10 @@ class Order:
             elif time_left > 30:
                 title = "⚠️Доставка опаздывает"
                 hashtag = "доставка_опаздывает"
+
+        elif self.exist_post["status"] == "conditionally_delivered":
+            title = "📍Условно доставлен"
+
         return title, hashtag
 
 
