@@ -32,6 +32,10 @@ async def alert_logs(alert_num: str) -> None:
     return
 
 
+async def edit_current_msg(text: str, reply_markup, chat_id, msg_id):
+    await dp.bot.edit_message_text(text=text, reply_markup=reply_markup, chat_id=chat_id, message_id=msg_id)
+
+
 async def send_message_to_logs(start_up: bool = False, turn_off: bool = False, txt='') -> None:
     if start_up:
         txt = f"Бот Запущен!"

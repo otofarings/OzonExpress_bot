@@ -132,6 +132,7 @@ class Order:
     async def update_partial_cancel_status(self):
         await logging_info(f"PART-CANCELED ORDER {self.posting_number}")
         await self.write_order_info_to_db()
+        await sql.create_part_cancelled_products(self.info)
         title = await get_new_title(self.info["status"])
         await self.write_title(title)
         await sql.write_tag(self.order_number, self.timezone, "частично_отменен")

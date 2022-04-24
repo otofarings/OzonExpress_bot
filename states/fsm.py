@@ -13,9 +13,11 @@ class NewEmployee(StatesGroup):
 class NewSeller(StatesGroup):
     town = State()
     seller_id = State()
+    warehouse_id = State()
     api_key = State()
     timezone = State()
     log_chat_id = State()
+    log_channel_id = State()
 
 
 class NewAPIKey(StatesGroup):

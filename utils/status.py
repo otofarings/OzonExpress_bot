@@ -53,6 +53,7 @@ async def change_status(function: str, action: str, status: str, tg_id: int, tz:
             current_time = await get_time(tz=tz)
             await write_new_status([tg_id, new_status, current_time], location)
             logging.info(f"{current_time}| {function} : {status} -> {new_status}")
+
     return new_status
 
 

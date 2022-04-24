@@ -2,10 +2,14 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeybo
 from aiogram.utils.callback_data import CallbackData
 
 from utils.db import sql
+from data.condition import FUNCTION
 
 
 async def get_callback(function_: str, args: list) -> str:
-    return CallbackData(function_, "menu", "level", "option", "item", "item_id", "action").new(*args)
+    if function_ in ["creator", "moderator"]:
+        return CallbackData(function_, "menu", "level", "seller", "option", "item", "item_id", "action").new(*args)
+    else:
+        return CallbackData(function_, "menu", "level", "option", "item", "item_id", "action").new(*args)
 
 
 async def create_btn(function_: str, name_: str,  args: list) -> InlineKeyboardButton:
@@ -42,7 +46,6 @@ async def return_markup(markup: InlineKeyboardMarkup) -> dict:
 
 class PackerButton:
     def __init__(self):
-        self.buttons = []
         self.on_shift_statuses = ["on_shift", "reserve_package", "packaging"]
         self.fact_quantity = 0
 
@@ -74,10 +77,11 @@ class PackerButton:
         buttons.append(dict(Назад=["package", "2", "0", "0", "0", "reserve_back"]))
         return await create_inline_keyboard(function, buttons)
 
-    async def buttons_4(self, function: str, post_number_: str) -> InlineKeyboardMarkup:
-        self.buttons = [{"Назад": ["package", "3", "0", "0", "0", "back"],
-                         "Собрать": ["package", "5", "0", "0", post_number_, "start_packaging"]}]
-        return await create_inline_keyboard(function, self.buttons)
+    @staticmethod
+    async def buttons_4(function: str, post_number_: str) -> InlineKeyboardMarkup:
+        buttons = [{"Назад": ["package", "3", "0", "0", "0", "back"],
+                    "Собрать": ["package", "5", "0", "0", post_number_, "start_packaging"]}]
+        return await create_inline_keyboard(function, buttons)
 
     async def buttons_5(self, function: str, category_names: dict, products_info: dict,
                         post: str, obj: str, action: str) -> InlineKeyboardMarkup:
@@ -97,7 +101,8 @@ class PackerButton:
                         buttons.append({"-": ["package", "5", product["sku"], weight, post, "minus"],
                                         product_quantity: ["package", "4", product["sku"], weight, post, "pass"],
                                         "+": ["package", "5", product["sku"], weight, post, "plus"]})
-                        await self.change_weight(weight, product["sku"], post)
+                        if weight != "0":
+                            buttons[-1][f"{weight} гр"] = ["package", "9", product["sku"], weight, post, "start_weight"]
                         count += 1
             else:
                 name = f"⏹ ️({products_info['all_ranks'].count(key)}) {value}"
@@ -147,10 +152,6 @@ class PackerButton:
     @staticmethod
     async def get_product_weight(weight):
         return str(weight) if weight else "0"
-
-    async def change_weight(self, weight: str, sku: int, post: str):
-        if weight != "0":
-            self.buttons[-1][f"{weight} гр"] = ["package", "9", sku, weight, post, "start_weight"]
 
     async def write_fact_quantity(self, product, action, obj, post):
         sku = int(product["sku"]) if obj == "category" else int(obj)
@@ -319,3 +320,163 @@ class DeliverButton:
                 "delivered": [{post: ["delivery", "7", "delivered", callback[4], callback[5], "open"]}],
                 "undelivered": [{post: ["delivery", "7", "undelivered", callback[4], callback[5], "open"]}]}
         return data[callback[3]]
+
+
+class AdminButton:
+    def __init__(self):
+        self.on_shift_statuses = ["on_shift", "reserve_package", "packaging", "delivering"]
+        self.employee = ['packer', 'courier']
+
+    async def buttons_1(self, function: str, status: str) -> InlineKeyboardMarkup:
+        if status in self.on_shift_statuses:
+            buttons = [{"Заказы": ["order", "2", "0", "0", "0", "open"]},
+                       {"Сотрудники": ["user", "2", "0", "0", "0", "open"]},
+                       {"Информация": ["info", "1", "0", "0", "0", "open"]},
+                       {"Завершить смену": ["main", "1", "0", "0", "0", "finish"]}]
+        else:
+            buttons = [{"Начать смену": ["main", "1", "0", "0", "0", "start"]},
+                       {"Информация": ["info", "1", "0", "0", "0", "open"]},
+                       {"Выйти": ["main", "0", "0", "0", "0", "close_bot"]}]
+        return await create_inline_keyboard(function, buttons)
+
+    @staticmethod
+    async def buttons_2_1(function: str) -> InlineKeyboardMarkup:
+        buttons = [{"Управление 🔧": ['order', '3', 'manage', '0', '0', 'open']},
+                   {"Сборка 📦": ['package', '2', '0', '0', '0', 'open'],
+                    "Доставка 🛺": ['delivery', '2', '0', '0', '0', 'open']},
+                   {"Назад": ['main', '1', '0', '0', '0', 'back']}]
+        return await create_inline_keyboard(function, buttons)
+
+    @staticmethod
+    async def buttons_3_1(function: str, orders: list, option: str) -> InlineKeyboardMarkup:
+        buttons = [{order['posting_number']: ['order', '4', option, '0', order['posting_number'], 'open']}
+                   for order in orders]
+        buttons.append({'Назад': ['order', '2', '0', '0', '0', 'back']})
+        return await create_inline_keyboard(function, buttons)
+
+    @staticmethod
+    async def buttons_4_1(function: str, order: dict, callback: list) -> InlineKeyboardMarkup:
+        option = FUNCTION['courier'] if order['start_delivery_date'] else (
+            FUNCTION['packer'] if order['start_package_date'] else '0')
+        buttons = [dict(Переназначить=['order', '4', option, '0', callback[5], 'reassign'])] if option != '0' else []
+        if not order['cancel_reason_id']:
+            buttons.append(dict(Отменить=['order', '5', '0', '0', callback[5], 'start_cancel']))
+        buttons.append(dict(Назад=['order', '3', callback[3], '0', '0', 'back']))
+        return await create_inline_keyboard(function, buttons)
+
+    async def buttons_2_2(self, function: str) -> InlineKeyboardMarkup:
+        buttons = [{FUNCTION[func].capitalize(): ['user', '3', func, '0', '0', 'open']} for func in self.employee]
+        buttons.append(dict(Назад=['main', '1', '0', '0', '0', 'back']))
+        return await create_inline_keyboard(function, buttons)
+
+    @staticmethod
+    async def buttons_3_2(function: str, users_info: list, callback: list) -> InlineKeyboardMarkup:
+        buttons = [{user['name']: ['user', '4', callback[3], '0', user['id'], 'open']} for user in users_info]
+        buttons.append({'Назад': ['user', '2', '0', '0', '0', 'back'],
+                        'Добавить': ['user', '4', callback[3], '0', '0', 'add']})
+        return await create_inline_keyboard(function, buttons)
+
+    @staticmethod
+    async def buttons_4_2(function: str, callback: list) -> InlineKeyboardMarkup:
+        buttons = [{'Назад':   ['user', '3', callback[3], '0', '0', 'back'],
+                    'Удалить': ['user', '3', callback[3], '0', callback[5], 'delete']}]
+        return await create_inline_keyboard(function, buttons)
+
+
+class CreatorButton:
+    def __init__(self):
+        self.employee = ['packer', 'courier', 'admin', 'moderator']
+
+    @staticmethod
+    async def buttons_1(function: str) -> InlineKeyboardMarkup:
+        buttons = [{'Бот': ['bot', '2', '0', '0', '0', '0', 'open']},
+                   {'Ozon Fresh': ['ozon', '2', '0', '0', '0', '0', 'open']}]
+        return await create_inline_keyboard(function, buttons)
+
+    @staticmethod
+    async def buttons_2_1(function: str) -> InlineKeyboardMarkup:
+        buttons = [{'Перезагрузить': ['bot', '2', '0', '0', '0', '0', 'restart']},
+                   {'Выключить': ['bot', '2', '0', '0', '0', '0', 'turn_off']},
+                   {'API': ['bot', '3', '0', 'api', '0', '0', 'open']},
+                   {'Назад': ['main', '1', '0', '0', '0', '0', 'back']}]
+        return await create_inline_keyboard(function, buttons)
+
+    @staticmethod
+    async def buttons_3_1(function: str, sellers: list) -> InlineKeyboardMarkup:
+        buttons = [{seller['seller_name']: ['bot', '4', seller['seller_id'], 'api',
+                                            seller['seller_name'], seller['status'], 'open']}
+                   for seller in sellers]
+        buttons.append({'Добавить': ['bot', '4', '0', 'api', '0', '0', 'add'],
+                        'Назад': ['bot', '2', '0', '0', '0', '0', 'back']})
+        return await create_inline_keyboard(function, buttons)
+
+    @staticmethod
+    async def buttons_4_1(function: str, name: str, seller: str, status: str) -> InlineKeyboardMarkup:
+        buttons = [{'Заменить API ключ': ['bot', '5', seller, 'api', name, '0', 'replace'],
+                    'Деактивировать': ['bot', '3', seller, 'api', name, '0', 'delete']} if status == "active" else
+                   {'Активировать': ['bot', '3', seller, 'api', name, '0', 'reactive']},
+                   {'Назад': ['bot', '3', '0', 'api', '0', '0', 'back']}]
+        return await create_inline_keyboard(function, buttons)
+
+    @staticmethod
+    async def buttons_2_2(function: str, sellers: list) -> InlineKeyboardMarkup:
+        buttons = [{seller['seller_name']: ['ozon', '3', seller['warehouse_id'], seller['seller_name'], '0', '0', 'open']}
+                   for seller in sellers]
+        buttons.append({'Назад': ['main', '1', '0', '0', '0', '0', 'back']})
+        return await create_inline_keyboard(function, buttons)
+
+    @staticmethod
+    async def buttons_3_2(function: str, seller: str) -> InlineKeyboardMarkup:
+        buttons = [{'Сотрудники': ['ozon', '4', seller, 'user', '0', '0', 'open'],
+                    'Заказы': ['ozon', '4', seller, 'order', '0', '0', 'pass']},
+                   {'Назад': ['ozon', '2', '0', '0', '0', '0', 'back']}]
+        return await create_inline_keyboard(function, buttons)
+
+    async def buttons_4_2_1(self, function: str, seller: str, option: str) -> InlineKeyboardMarkup:
+        buttons = [{FUNCTION[function].capitalize(): ['ozon', '5', seller, option, function, '0', 'open']}
+                   for function in self.employee]
+        buttons.append({'Назад': ['ozon', '3', seller, '0', '0', '0', 'back']})
+        return await create_inline_keyboard(function, buttons)
+
+    @staticmethod
+    async def buttons_5_2_1(function: str, users: list, seller: str, option: str, item: str) -> InlineKeyboardMarkup:
+        buttons = [{user['name']: ['ozon', '6', seller, option, item, user['id'], 'open']} for user in users]
+        buttons.append({'Добавить': ['ozon', '6', seller, option, item, '0', 'add'],
+                        'Назад': ['ozon', '4', seller, option, '0', '0', 'back']})
+        return await create_inline_keyboard(function, buttons)
+
+    @staticmethod
+    async def buttons_6_2_1(function: str, seller: str, option: str, item: str, item_id: str) -> InlineKeyboardMarkup:
+        buttons = [{'Удалить': ['ozon', '5', seller, option, item, item_id, 'delete'],
+                    'Назад': ['ozon', '5', seller, option, item, '0', 'back']}] if item_id not in [
+            '1', '7'] else [{'Назад': ['ozon', '5', seller, option, item, '0', 'back']}]
+        return await create_inline_keyboard(function, buttons)
+
+
+class BackButton:
+    def __init__(self):
+        self.functions = {"admin": self.user_admin_back_menu,
+                          "moderator": "",
+                          "creator": [self.user_create_back_menu_1, self.user_create_back_menu_2,
+                                      self.user_create_back_menu_3]}
+
+    @staticmethod
+    async def user_create_back_menu_1(function: str) -> InlineKeyboardMarkup:
+        buttons = [{'Назад': ['bot', '3', '0', 'api', '0', '0', 'back']}]
+        return await create_inline_keyboard(function, buttons)
+
+    @staticmethod
+    async def user_create_back_menu_2(function: str, seller: str, item: str) -> InlineKeyboardMarkup:
+        buttons = [{'Назад': ['bot', '4', seller, 'api', '0', item, 'back']}]
+        return await create_inline_keyboard(function, buttons)
+
+    @staticmethod
+    async def user_create_back_menu_3(function: str, seller: str, item: str) -> InlineKeyboardMarkup:
+        buttons = [{'Назад': ['ozon', '5', seller, "user", item, '0', 'back']}]
+        return await create_inline_keyboard(function, buttons)
+
+    @staticmethod
+    async def user_admin_back_menu(function: str, option: str) -> InlineKeyboardMarkup:
+        buttons = [{'Назад': ['user', '3', option, '0', '0', 'cancel']}]
+        return await create_inline_keyboard(function, buttons)
+    

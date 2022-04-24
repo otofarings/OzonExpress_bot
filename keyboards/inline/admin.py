@@ -1,62 +1,34 @@
-from aiogram.types import InlineKeyboardButton, CallbackQuery
-from aiogram.utils.callback_data import CallbackData
-import aiogram.utils.markdown as fmt
+from aiogram.types import CallbackQuery
 
 from utils.db import sql
 from utils.message import push_info_msg
 from utils.formate_text import AdminMenu
+from utils.formate_button import create_reply_markup, AdminButton
 from utils.ozon_express_api.request import cancel_order
-from keyboards.creating import create_reply_markup, create_inline_keyboard
 from utils.proccess_time import get_predict_time_for_delivery
-from data.condition import FUNCTION
 
 
-admin = AdminMenu()
-
-callback_data = CallbackData('admin', 'menu', 'level', 'option', 'item', 'item_id', 'action')
-
-menu_name = fmt.hbold("Меню Администратора")
-order_menu = fmt.text("\nУправление заказами\nСписок за последние 24 часа")
-
-
-async def create_button(text: str, args: list):
-    return InlineKeyboardButton(text=text, callback_data=callback_data.new(*args))
+admin_txt = AdminMenu()
+admin_btn = AdminButton()
 
 
 # ****************************************Admin****************************************
 async def get_level_1(function: str, status: str) -> dict:
-    if status in ["on_shift", "reserve_package", "packaging", "delivering"]:
-        buttons = [{"Заказы":       ["order", "2", "0", "0", "0", "open"]},
-                   {"Сотрудники":   ["user", "2", "0", "0", "0", "open"]},
-                   {"Информация":   ["info", "1", "0", "0", "0", "open"]},
-                   {"Завершить смену": ["main", "1", "0", "0", "0", "finish"]}]
-    else:
-        buttons = [{"Начать смену":  ["main", "1", "0", "0", "0", "start"]},
-                   {"Информация":    ["info", "1", "0", "0", "0", "open"]},
-                   {"Выйти":         ["main", "0", "0", "0", "0", "close_bot"]}]
-    text = await admin.admin_menu_1()
-    return await create_reply_markup(text, function, buttons)
+    return await create_reply_markup(await admin_txt.admin_menu_1(),
+                                     await admin_btn.buttons_1(function, status))
 
 
 # ****************************************Orders****************************************
 async def get_order_level_2(function: str) -> dict:
-    buttons = [{"Управление 🔧":  ['order', '3', 'manage', '0', '0', 'open']},
-               {"Сборка 📦":      ['package', '2', '0', '0', '0', 'open'],
-                "Доставка 🛺":    ['delivery', '2', '0', '0', '0', 'open']},
-               {"Назад":          ['main', '1', '0', '0', '0', 'back']}]
-    text = await admin.orders_menu_2()
-    return await create_reply_markup(text, function, buttons)
+    return await create_reply_markup(await admin_txt.orders_menu_2(),
+                                     await admin_btn.buttons_2_1(function))
 
 
 async def get_order_level_3(function: str, option: str, tg_id: int, tz: str) -> dict:
     orders_data = await sql.get_orders_last_day_info(tg_id, tz)
 
-    buttons = []
-    for order in orders_data:
-        buttons.append({order['posting_number']: ['order', '4', option, '0', order['posting_number'], 'open']})
-    buttons.append({'Назад': ['order', '2', '0', '0', '0', 'back']})
-    text = await admin.orders_menu_3(len(orders_data))
-    return await create_reply_markup(text, function, buttons)
+    return await create_reply_markup(await admin_txt.orders_menu_3(len(orders_data)),
+                                     await admin_btn.buttons_3_1(function, orders_data, option))
 
 
 async def get_order_level_4(function: str, cll: CallbackQuery) -> dict:
@@ -82,21 +54,8 @@ async def get_order_level_4(function: str, cll: CallbackQuery) -> dict:
     order_info = await sql.get_order_info(callback[5])
     predicted_date = await get_predict_time_for_delivery(order_info["shipment_date"], 24)
 
-    buttons = []
-    if order_info:
-        if order_info['start_delivery_date']:
-            option = FUNCTION['courier']
-        elif order_info['start_package_date']:
-            option = FUNCTION['packer']
-        else:
-            option = '0'
-        if option and option != '0':
-            buttons.append({'Переназначить': ['order', '4', option, '0', callback[5], 'reassign']})
-    if not order_info['cancel_reason_id']:
-        buttons.append({'Отменить': ['order', '5', '0', '0', callback[5], 'start_cancel']})
-    buttons.append({'Назад': ['order', '3', callback[3], '0', '0', 'back']})
-    text = await admin.orders_menu_4(order_info, predicted_date, callback[6])
-    return await create_reply_markup(text, function, buttons)
+    return await create_reply_markup(await admin_txt.orders_menu_4(order_info, predicted_date, callback[6]),
+                                     await admin_btn.buttons_4_1(function, order_info, callback))
 
 
 async def get_users_for_reassign_menu(cll: CallbackQuery):
@@ -162,42 +121,24 @@ async def get_user_for_reassign_menu(cll: CallbackQuery = None, state=None):
 
 # ****************************************Employee****************************************
 async def get_employee_level_2(function: str) -> dict:
-    buttons = []
-    for func in ['packer', 'courier']:
-        buttons.append({FUNCTION[func].capitalize(): ['user', '3', func, '0', '0', 'open']})
-    buttons.append({'Назад':               ['main', '1', '0', '0', '0', 'back']})
-    text = await admin.employee_menu_2()
-    return await create_reply_markup(text, function, buttons)
+    return await create_reply_markup(await admin_txt.employee_menu_2(),
+                                     await admin_btn.buttons_2_2(function))
 
 
 async def get_employee_level_3(function: str, cll: CallbackQuery) -> dict:
     callback = cll.data.split(':')
-
     if callback[6] == 'delete':
         await sql.delete_employee(int(callback[5]))
-
     users_info = await sql.get_users_info(cll.from_user.id, callback[3])
 
-    buttons = []
-    for user in users_info:
-        buttons.append({user['name']: ['user', '4', callback[3], '0', user['id'], 'open']})
-
-    buttons.append({'Назад': ['user', '2', '0', '0', '0', 'back'],
-                    'Добавить': ['user', '4', callback[3], '0', '0', 'add']})
-    text = await admin.employee_menu_3(callback[3])
-    return await create_reply_markup(text, function, buttons)
+    return await create_reply_markup(await admin_txt.employee_menu_3(callback[3]),
+                                     await admin_btn.buttons_3_2(function, users_info, callback))
 
 
 async def get_employee_level_4(function: str, cll: CallbackQuery) -> dict:
     callback = cll.data.split(":")
     user_info = await sql.get_user_info(user_id=int(callback[5]))
 
-    buttons = [{'Назад':   ['user', '3', callback[3], '0', '0', 'back'],
-                'Удалить': ['user', '3', callback[3], '0', callback[5], 'delete']}]
-    text = await admin.employee_menu_4(user_info)
-    return await create_reply_markup(text, function, buttons)
+    return await create_reply_markup(await admin_txt.employee_menu_4(user_info),
+                                     await admin_btn.buttons_4_2(function, callback))
 
-
-async def get_user_create_back_menu(function, option):
-    buttons = await create_inline_keyboard(function, [{'Назад': ['user', '3', option, '0', '0', 'cancel']}])
-    return buttons

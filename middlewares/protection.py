@@ -23,6 +23,8 @@ async def check_user_state(user_id: int):
             return user_info['function'], user_info['status'], user_info['state'], user_info['timezone']
         else:
             raise CancelHandler
+    else:
+        return "creator", "on_shift", "activated", "Europe/Moscow"
 
 
 async def check_activating(tg_id: int, state: str):
@@ -33,9 +35,10 @@ async def check_activating(tg_id: int, state: str):
 
 
 async def check_start_command(msg) -> None:
-    msg_lst = msg.text.split() if not msg.location else msg.reply_to_message.text.split()
-    if msg_lst[0] == "/start":
-        await check_start_msg_len(msg_lst, msg.chat.id, msg.from_user.id, msg.from_user.username)
+    if not msg.location:
+        msg_lst = msg.text.split()
+        if msg_lst[0] == "/start":
+            await check_start_msg_len(msg_lst, msg.chat.id, msg.from_user.id, msg.from_user.username)
     return
 
 
@@ -83,10 +86,10 @@ class Protection(BaseMiddleware):
                 await sql.log_entry(update.message)
                 await check_start_command(update.message)
             else:
-                if (update.message.sender_chat.type == 'channel') and (update.message.from_user.id == 777000):
-                    await update_msg_id(update.message.forward_from_message_id, update.message.message_id)
                 if update.message.from_user.id in CREATORS:
                     await update.message.reply(update.message.chat.id)
+                if (update.message.sender_chat.type == 'channel') and (update.message.from_user.id == 777000):
+                    await update_msg_id(update.message.forward_from_message_id, update.message.message_id)
                 raise CancelHandler
 
         elif update.callback_query:

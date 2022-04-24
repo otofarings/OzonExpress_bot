@@ -21,7 +21,10 @@ MENU = {1: b("Меню сборки" + EMOJI[1]),
         3: b("Меню Администратора" + EMOJI[3]),
         4: b("Меню управления заказами" + EMOJI[4]),
         5: b("Меню управления сотрудниками" + EMOJI[5]),
-        6: b("Меню ввода весовых данных" + EMOJI[6])}
+        6: b("Меню ввода весовых данных" + EMOJI[6]),
+        7: b("Основное меню"),
+        8: b("Меню управления ботом"),
+        9: b("Меню управления Ozon Fresh")}
 
 BUTTON = {1: b("Сборка"),
           2: b("Доставка"),
@@ -74,7 +77,10 @@ OBJ = {1:  b("Отправление" + SYMBOL[6]),
        41: b("Добавивший" + SYMBOL[6]),
        42: b("Время получения" + SYMBOL[6]),
        43: b("Причина" + SYMBOL[6]),
-       44: b("С момента получения прошло" + SYMBOL[6])}
+       44: b("С момента получения прошло" + SYMBOL[6]),
+       45: b("Количество активных франчайзи:" + SYMBOL[6]),
+       46: b("ID продавца" + SYMBOL[6]),
+       47: b("Количество {}ов" + SYMBOL[6])}
 
 STAT = {1: "Завершил сборку",
         2: "Полностью",
@@ -115,7 +121,9 @@ TEXT = {1:  t(SYMBOL[1] + "Нажмите", BUTTON[3], "через нескол�
         27: t("резервируют заказы"),
         28: b("Заказы"),
         29: t(SYMBOL[1] + "Выберите должность" + SYMBOL[6]),
-        30: t(SYMBOL[1] + "Список за последние 24 часа")}
+        30: t(SYMBOL[1] + "Список за последние 24 часа"),
+        31: t("Выберите опцию" + SYMBOL[6]),
+        32: t("Выберите должность" + SYMBOL[6])}
 
 LINKS = {1: "tg://user?id="}
 
@@ -389,7 +397,7 @@ async def employee_description(user_: dict) -> str:
                       t(OBJ[39], FUNCTION[user_["function"]]),
                       t(OBJ[3], USERS_STATE[user_["state"]]),
                       t(OBJ[40], await edit_time(user_["begin_date"])),
-                      t(OBJ[41], await nick_name(user_["added_by_name"]))])
+                      t(OBJ[41], await user_link(user_["added_by_name"], user_["added_by_id"]))])
 
 
 async def inputted_weight(weight: str) -> str:
@@ -573,6 +581,52 @@ class AdminMenu:
     async def employee_menu_4(self, user_: dict) -> str:
         return await txt([self.menu_employee,
                           await employee_description(user_)])
+
+
+class CreatorMenu:
+    @staticmethod
+    async def create_menu_1() -> str:
+        return MENU[7]
+
+    @staticmethod
+    async def create_menu_2_1() -> str:
+        return MENU[8]
+
+    @staticmethod
+    async def create_menu_3_1(active_api: int) -> str:
+        return await txt([MENU[8],
+                          t(OBJ[45], active_api)])
+
+    @staticmethod
+    async def create_menu_4_1(name: str, seller: str) -> str:
+        return await txt([MENU[8],
+                          c(name),
+                          t(OBJ[46], seller)])
+
+    @staticmethod
+    async def create_menu_2_2(active_api: int) -> str:
+        return await txt([MENU[9],
+                          t(OBJ[45], active_api)])
+
+    @staticmethod
+    async def create_menu_3_2():
+        return await txt([MENU[9],
+                          TEXT[31]])
+
+    @staticmethod
+    async def create_menu_4_2_1() -> str:
+        return await txt([MENU[9],
+                          TEXT[32]])
+
+    @staticmethod
+    async def create_menu_5_2_1(function: str, count: int) -> str:
+        return await txt([MENU[9],
+                          t(OBJ[47].format(function), count)])
+
+    @staticmethod
+    async def create_menu_6_2_1(user_info: dict) -> str:
+        return await txt([MENU[9],
+                          await employee_description(user_info)])
 
 
 async def weighting_product(name: str, not_digit: bool) -> list:

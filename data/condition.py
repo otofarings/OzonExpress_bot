@@ -323,7 +323,8 @@ API_METHODS = {  # Возвращает список складов.
 # ****************************************Callback****************************************
 CALLBACK = {"courier": CallbackData("courier", "menu", "level", "option", "item", "item_id", "action"),
             "packer":  CallbackData("packer", "menu", "level", "option", "item", "item_id", "action"),
-            "admin":   CallbackData("admin", "menu", "level", "option", "item", "item_id", "action")}
+            "admin":   CallbackData("admin", "menu", "level", "option", "item", "item_id", "action"),
+            "creator": CallbackData("creator", "menu", "level", "seller", "option", "item", "item_id", "action")}
 
 
 # ****************************************ErrorsLogs****************************************

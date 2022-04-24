@@ -19,6 +19,13 @@ async def write_bot_finish_status() -> None:
 
 
 # ****************************************api****************************************
+async def get_all_api_info() -> list:
+    sellers_info = await db_query(func='fetch',
+                                  sql="""SELECT * FROM api;""",
+                                  kwargs=[])
+    return sellers_info[0]
+
+
 async def get_sellers_api_info() -> list:
     sellers_info = await db_query(func='fetch',
                                   sql="""SELECT * FROM api
@@ -42,11 +49,29 @@ async def get_api_info(tg_id: int) -> dict:
 async def create_new_api(dct: dict) -> None:
     await db_query(func='execute',
                    sql="""INSERT INTO api 
-                          (seller_id, api_key, seller_name, timezone, log_chat_id, warehouse_id)
-                          VALUES($1, $2, $3, $4, $5, $6) 
-                          ON CONFLICT (warehouse_id) DO NOTHING;""",
-                   kwargs=[dct['seller_id'], dct['api_key'], dct['seller_name'],
-                           dct['timezone'], dct['log_chat_id'], dct['warehouse_id']])
+                          (seller_id, api_key, seller_name, timezone, log_chat_id, warehouse_id, channel_id, status)
+                          VALUES($1, $2, $3, $4, $5, $6, $7, $8);""",
+                   kwargs=[int(dct['seller_id']), dct['api_key'], dct['seller_name'],
+                           dct['timezone'], dct['log_chat_id'], dct['warehouse_id'],
+                           dct["log_channel_id"], "active"])
+    return
+
+
+async def deactivate_api(seller_name: str) -> None:
+    await db_query(func='execute',
+                   sql="""UPDATE api 
+                          SET status = $2 
+                          WHERE seller_name = $1;""",
+                   kwargs=[seller_name, "inactive"])
+    return
+
+
+async def activate_api(seller_name: str) -> None:
+    await db_query(func='execute',
+                   sql="""UPDATE api 
+                          SET status = $2 
+                          WHERE seller_name = $1;""",
+                   kwargs=[seller_name, "active"])
     return
 
 
@@ -99,7 +124,18 @@ async def get_users_info(tg_id: int, function: str) -> list:
                                       AND warehouse_id IN (SELECT warehouse_id 
                                                            FROM employee 
                                                            WHERE tg_id = $1);""",
-                               kwargs=[tg_id, function, 'удален'])  # Исправить
+                               kwargs=[tg_id, function, 'removed']) 
+    return user_info[0]
+
+
+async def get_users(warehouse_id: int, function: str) -> list:
+    user_info = await db_query(func='fetch',
+                               sql="""SELECT name, id 
+                                      FROM employee 
+                                      WHERE function = $2 
+                                      AND state != $3
+                                      AND warehouse_id = $1;""",
+                               kwargs=[warehouse_id, function, 'removed'])
     return user_info[0]
 
 
@@ -111,7 +147,7 @@ async def update_msg(message_id: int, chat_id: int):
                                        RETURNING (SELECT msg_id 
                                                   FROM employee 
                                                   WHERE tg_id = $2 AND state != $3);""",
-                                kwargs=[message_id, chat_id, 'удален'])  # Исправить
+                                kwargs=[message_id, chat_id, 'removed'])  # Исправить
     return old_msg_id[0][0]['msg_id']
 
 
@@ -133,7 +169,7 @@ async def get_last_msg(tg_id: int):
                             sql="""SELECT msg_id 
                                    FROM employee 
                                    WHERE tg_id = $1 AND state != $2;""",
-                            kwargs=[tg_id, 'удален'])  # Исправить
+                            kwargs=[tg_id, 'removed'])  # Исправить
     return msg_id[0][0]['msg_id']
 
 
@@ -156,13 +192,14 @@ async def register_new_moderator(uuid: str, name: str, function: str, tg_id: int
 
 
 async def register_new_admin(uuid: str, name: str, function: str, tg_id: int,
-                             phone: str, warehouse_id: int, seller_id: int) -> None:
+                             phone: str, warehouse_id: int) -> None:
     await db_query(func='execute',
                    sql="""INSERT INTO employee 
                           (uuid, state, name, function, added_by_id, phone, warehouse_id, seller_id)
-                          VALUES($1, $2, $3, $4, $5, $6, $7, $8);""",
+                          VALUES($1, $2, $3, $4, $5, $6, $7, 
+                          (SELECT seller_id FROM api WHERE warehouse_id = $7));""",
                    kwargs=[uuid, 'awaiting_activating', name, function, tg_id,
-                           phone, warehouse_id, seller_id])
+                           phone, warehouse_id])
 
 
 async def register_new_employee(uuid: str, name: str, function: str, tg_id: int, phone: str) -> None:
@@ -203,7 +240,7 @@ async def delete_employee(tg_id: int) -> None:
                    sql="""UPDATE employee 
                           SET state = $1, end_date = $2 
                           WHERE id = $3;""",
-                   kwargs=['удален', await get_time(), tg_id])
+                   kwargs=['removed', await get_time(), tg_id])
     return
 
 
@@ -609,6 +646,24 @@ async def create_new_products(order: dict, products_info: dict) -> None:
                                product['offer_id'], product['quantity'], float(product['price']), False,
                                extra_info["volume_weight"], extra_info["category_id"], extra_info["product_id"],
                                barcode, extra_info["primary_image"], extra_info["rank"]])
+    return
+
+
+async def create_part_cancelled_products(order: dict) -> None:
+    for product in order['products']:
+        await db_query(func='execute',
+                       sql="""INSERT INTO order_list 
+                              (order_id, posting_number, sku, name, offer_id, quantity, price, fact_quantity, changed,
+                               volume_weight, category_id, product_id, barcode, primary_image, rank) 
+                              VALUES($1, $2, $3, $4, $5, $6, $7, $6, $8,
+                                     (SELECT volume_weight FROM order_list WHERE order_id = $1 AND sku = $3),
+                                     (SELECT category_id FROM order_list WHERE order_id = $1 AND sku = $3),
+                                     (SELECT product_id FROM order_list WHERE order_id = $1 AND sku = $3),
+                                     (SELECT barcode FROM order_list WHERE order_id = $1 AND sku = $3),
+                                     (SELECT primary_image FROM order_list WHERE order_id = $1 AND sku = $3),
+                                     (SELECT rank FROM order_list WHERE order_id = $1 AND sku = $3));""",
+                       kwargs=[order['order_id'], order['posting_number'], int(product['sku']), product['name'],
+                               product['offer_id'], product['quantity'], float(product['price']), False])
     return
 
 
