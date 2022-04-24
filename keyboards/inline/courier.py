@@ -3,22 +3,22 @@ from aiogram.types import CallbackQuery
 
 from states.fsm import finish_state, get_fsm_data, save_fsm_data
 from utils.formate_text import DeliverMenu
+from utils.formate_button import DeliverButton, create_reply_markup, return_markup
 from utils.status import reserve_back
 from utils.message import send_info_log
 from utils.db import sql
 from utils.proccess_time import get_predict_time_for_delivery
 from utils.ozon_express_api.request import start_delivery_api, start_delivery_last_mile, complete_delivery_ozon
-from keyboards.creating import create_reply_markup, return_markup
 
 
-deliver = DeliverMenu()
+deliver_txt = DeliverMenu()
+deliver_btn = DeliverButton()
 
 
 # ****************************************Delivering****************************************
 async def get_level_1(function: str, status: str) -> dict:
-    buttons = await get_data_level_1(status)
-    text = await deliver.menu_1()
-    return await create_reply_markup(text, function, buttons)
+    return await create_reply_markup(await deliver_txt.menu_1(),
+                                     await deliver_btn.buttons_1(function, status))
 
 
 async def get_level_2(function: str, cll: CallbackQuery) -> dict:
@@ -26,9 +26,8 @@ async def get_level_2(function: str, cll: CallbackQuery) -> dict:
     count = await sql.count_orders(cll.from_user.id, "awaiting_deliver")
     reserved_users = await sql.get_reserved_user(cll.from_user.id, "reserve_delivery")
 
-    buttons = await get_data_level_2(count, await get_callback_data_for_back_button(function))
-    text = await deliver.menu_2(count, reserved_users)
-    return await create_reply_markup(text, function, buttons)
+    return await create_reply_markup(await deliver_txt.menu_2(count, reserved_users),
+                                     await deliver_btn.buttons_2(function, count))
 
 
 async def get_level_3(function: str, cll: CallbackQuery) -> dict:
@@ -36,31 +35,20 @@ async def get_level_3(function: str, cll: CallbackQuery) -> dict:
     limit = int(callback[3]) if callback[6] == "ex_add" else None
     orders = await sql.reserve_orders_for_delivery(cll.from_user.id, limit)
 
-    buttons, count = await get_data_level_3(orders, callback[6])
-    text = await deliver.menu_3(count, callback[6])
-    return await create_reply_markup(text, function, buttons)
+    return await create_reply_markup(await deliver_txt.menu_3(len(orders), callback[6]),
+                                     await deliver_btn.buttons_3(function, orders, callback[6]))
 
 
 async def get_level_4(function: str, cll: CallbackQuery) -> dict:
     order = await sql.get_order_info_for_delivering(cll.data.split(":")[5])
     predicted_time = await get_predict_time_for_delivery(order["shipment_date"], 24)
 
-    buttons = [{"Назад": ["delivery", "4", "0", "0", "0", "back"]}]
-    text = await deliver.menu_4(order, predicted_time)
-    return await create_reply_markup(text, function, buttons)
+    return await create_reply_markup(await deliver_txt.menu_4(order, predicted_time),
+                                     await deliver_btn.buttons_4(function))
 
 
 async def get_level_5(cll: CallbackQuery) -> dict:
-    markup = cll.message.reply_markup
-    for ind, button in enumerate(markup.inline_keyboard):
-        if cll.data == button[1].callback_data:
-            new_data = cll.data.split(":")
-            if new_data[-1] in ["add", "rem"]:
-                new_sign, new_data[6] = ("✅️", "rem") if new_data[-1] == "add" else ("☑️️", "add")
-                markup.inline_keyboard[ind][1].text = new_sign
-                markup.inline_keyboard[ind][1].callback_data = ":".join(new_data)
-                break
-    return await return_markup(markup)
+    return await return_markup(await deliver_btn.buttons_5(cll))
 
 
 async def get_level_6(function: str, cll: CallbackQuery, state: FSMContext, tz: str) -> dict:
@@ -72,129 +60,56 @@ async def get_level_6(function: str, cll: CallbackQuery, state: FSMContext, tz: 
         await start_delivery_api(cll.from_user.id, new_orders)
         await save_fsm_data(state, data_=[dict(order) for order in orders_for_delivery])
         await reserve_back(cll.from_user.id, "reserve_delivery")
-        for order in new_orders:
-            await send_info_log(cll.message.chat.id, "Начал доставку", order)
+        [await send_info_log(cll.message.chat.id, "Начал доставку", order) for order in new_orders]
 
-        buttons = await get_data_level_6(orders_for_delivery)
-    else:
-        buttons = await get_data_for_null_orders()
-
-    text = await deliver.menu_6(len(orders_for_delivery), len(orders["added"]))
-    return await create_reply_markup(text, function, buttons)
+    return await create_reply_markup(await deliver_txt.menu_6(len(orders_for_delivery), len(orders["added"])),
+                                     await deliver_btn.buttons_6(function, orders_for_delivery))
 
 
 async def get_level_7(function: str, cll: CallbackQuery, state: FSMContext) -> dict:
-    order = (await get_fsm_data(state, ["data_"]))["data_"][int(cll.data.split(":")[4])]
+    try:
+        order = (await get_fsm_data(state, ["data_"]))["data_"][int(cll.data.split(":")[4])]
+    except KeyError:
+        order = await sql.get_order_info(cll.data.split(":")[5])
 
-    buttons = [{"Назад": ["delivery", "7", "0", "0", "0", "back"]}]
-    text = await deliver.menu_7(order)
-    return await create_reply_markup(text, function, buttons)
+    return await create_reply_markup(await deliver_txt.menu_7(order),
+                                     await deliver_btn.buttons_7(function))
 
 
 async def get_level_8(function: str, cll: CallbackQuery, state: FSMContext):
     orders = (await get_fsm_data(state, ["data_"]))["data_"]
     await start_delivery_last_mile(cll.from_user.id, [order["posting_number"] for order in orders])
 
-    buttons = await get_data_level_8(orders)
-    text = await deliver.menu_8(len(orders))
-    return await create_reply_markup(text, function, buttons)
+    return await create_reply_markup(await deliver_txt.menu_8(len(orders)),
+                                     await deliver_btn.buttons_8(function, orders))
 
 
 async def get_level_9(function, tz, cll: CallbackQuery = None, callback=None,
                       reply_markup=None, tg_id=None, location=None):
     callback_ = callback.split(":") if callback else cll.data.split(":")
-    current_reply_markup = reply_markup if reply_markup else cll.message.reply_markup
+    markup = reply_markup if reply_markup else cll.message.reply_markup
     current_tg_id = tg_id if tg_id else cll.message.chat.id
-    in_process, delivered, undelivered, buttons = 0, 0, 0, []
 
-    for row in current_reply_markup.inline_keyboard:
-        if len(row) == 1:
-            for button in row:
-                button_data = button.callback_data.split(":")
+    if callback_[6] == "delivered":
+        await complete_delivery_ozon(current_tg_id, callback_[5])
+        await sql.complete_posting_delivery(callback_[5], current_tg_id, tz, location, 'conditionally_delivered')
+        await send_info_log(current_tg_id, "Завершил доставку", callback_[5], "Доставлено")
 
-                if callback_[5] == button_data[5]:
-                    if callback_[6] == "undelivered":
-                        buttons.append(
-                            {f"{button.text}": ["delivery", "7", "cancel", button_data[4], button_data[5], "open"]})
-                        buttons.append(
-                            {"Назад": ["delivery", "9", "button", button_data[4], button_data[5], "back"],
-                             "🔙Отказ от товара": ["delivery", "9", "button", button_data[4], button_data[5], "return"],
-                             "📵Не дозвонился": ["delivery", "9", "button", button_data[4], button_data[5], "no_call"]})
-                        in_process += 1
+    elif callback_[6] in ["return", "no_call"]:
+        await sql.complete_posting_delivery(callback_[5], current_tg_id, tz, location, 'undelivered')
+        await send_info_log(current_tg_id, "Завершил доставку", callback_[5], "Не доставлено",
+                            "Отказ" if callback_[6] == "return" else "Не дозвонился")
 
-                    elif callback_[6] == "delivered":
-                        await complete_delivery_ozon(current_tg_id, button.text)
-                        await sql.complete_posting_delivery(button_data[5], current_tg_id,
-                                                            tz, location, 'conditionally_delivered')
-                        await send_info_log(current_tg_id, "Завершил доставку", button.text, "Доставлено")
-                        buttons.append({f"{button.text} ✅": ["delivery", "7", "delivered",
-                                                             button_data[4], button_data[5], "open"]})
-                        delivered += 1
-
-                    elif callback_[6] in ["return", "no_call"]:
-                        await sql.complete_posting_delivery(button_data[5], current_tg_id, tz, location, 'undelivered')
-                        await send_info_log(current_tg_id, "Завершил доставку", button.text, "Не доставлено",
-                                            "Отказ" if callback_[6] == "return" else "Не дозвонился")
-                        posting_button = f"{button.text} 📵" if callback_[6] == "no_call" else f"{button.text} 🔙"
-                        buttons.append({posting_button: ["delivery", "7", "undelivered",
-                                                         button_data[4], button_data[5], "open"]})
-                        undelivered += 1
-
-                    elif callback_[6] in ["back"]:
-                        buttons.append({button.text: ["delivery", "7", "in_process",
-                                                      button_data[4], button_data[5], "open"]})
-                        buttons.append({"✖Не доставлен": ["delivery", "9", "button",
-                                                          button_data[4], button_data[5], "undelivered"],
-                                        "✔Доставлен": ["delivery", "9", "button",
-                                                       button_data[4], button_data[5], "delivered"]})
-                        in_process += 1
-
-                elif button_data[3] == "in_process":
-                    buttons.append({button.text: ["delivery", "7", "in_process",
-                                                  button_data[4], button_data[5], "open"]})
-                    buttons.append({"✖Не доставлен": ["delivery", "9", "button",
-                                                      button_data[4], button_data[5], "undelivered"],
-                                    "✔Доставлен": ["delivery", "9", "button",
-                                                   button_data[4], button_data[5], "delivered"]})
-                    in_process += 1
-
-                elif button_data[3] == "cancel":
-                    buttons.append({button.text: ["delivery", "7", "cancel",
-                                                  button_data[4], button_data[5], "open"]})
-                    buttons.append({"Назад": ["delivery", "9", "button", button_data[4], button_data[5], "back"],
-                                    "🔙Отказ от товара": ["delivery", "9", "button",
-                                                          button_data[4], button_data[5], "return"],
-                                    "📵Не дозвонился": ["delivery", "9", "button",
-                                                        button_data[4], button_data[5], "no_call"]})
-                    in_process += 1
-
-                elif button_data[3] == "delivered":
-                    buttons.append({button.text: ["delivery", "7", "delivered",
-                                                  button_data[4], button_data[5], "open"]})
-                    delivered += 1
-
-                elif button_data[3] == "undelivered":
-                    buttons.append({button.text: ["delivery", "7", "undelivered",
-                                                  button_data[4], button_data[5], "open"]})
-                    undelivered += 1
-                break
-
-    text = await deliver.menu_9(in_process, delivered, undelivered)
-    if in_process == 0:
-        if undelivered == 0:
-            buttons.append({"Возвращаюсь на склад": ["delivery", "10", "returning", "0", "0", "open"]})
-        else:
-            buttons.append({"Возвращаюсь на склад": ["delivery", "10", "returning", "undelivered", "0", "open"]})
-
-    return await create_reply_markup(text, function, buttons)
+    buttons, in_process, delivered, undelivered = await deliver_btn.buttons_9(function, callback_, markup)
+    return await create_reply_markup(await deliver_txt.menu_9(in_process, delivered, undelivered), buttons)
 
 
 async def get_level_10(function: str, cll: CallbackQuery):
     await finish_state(cll.message.chat.id, cll.from_user.id)
+    option = cll.data.split(":")[4]
 
-    buttons = await get_data_level_10(cll.data.split(":")[-3])
-    text = await deliver.menu_10(cll.data.split(":")[-3])
-    return await create_reply_markup(text, function, buttons)
+    return await create_reply_markup(await deliver_txt.menu_10(option),
+                                     await deliver_btn.buttons_10(function, option))
 
 
 # ****************************************Extra****************************************

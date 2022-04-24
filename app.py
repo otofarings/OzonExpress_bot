@@ -11,12 +11,12 @@ from polling import start_polling_api
 async def main():
     await start_sql_bd()
     await start_polling_api()
-    # await send_message_to_logs(start_up=True)
+    await send_message_to_logs(start_up=True)
     try:
         await dp.skip_updates()
         await dp.start_polling()
     finally:
-        # await send_message_to_logs(turn_off=True)
+        await send_message_to_logs(turn_off=True)
         await dp.storage.close()
         await dp.storage.wait_closed()
         await bot.session.close()

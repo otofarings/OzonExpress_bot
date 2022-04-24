@@ -134,7 +134,7 @@ class Order:
         await self.write_order_info_to_db()
         title = await get_new_title(self.info["status"])
         await self.write_title(title)
-        await sql.write_tag(self.order_number, self.timezone, "частично_отмен")
+        await sql.write_tag(self.order_number, self.timezone, "частично_отменен")
         hashtags = await sql.get_tags(self.order_number)
 
         main_posting = await sql.get_order_info(self.exist_order["posting_number"])
@@ -166,6 +166,10 @@ class Order:
                     status_=self.info["status"])
                 await self.write_msg(text)
 
+        elif (self.info["status"] == "delivering") and (self.exist_post["status"] == "delivering"):
+            await self.change_status()
+            await self.update_description()
+
         elif await self.condition_to_change_status():
             title = "⚠️Статус переведен из ЛK"
             if title != self.exist_post["current_status"]:
@@ -181,7 +185,8 @@ class Order:
 
     async def condition_to_change_status(self):
         if ((self.info["status"] == "delivering") and (
-                (self.exist_post["status"] not in ["delivered", "undelivered", "conditionally_delivered", "cancelled"])
+                (self.exist_post["status"] not in [
+                    "delivered", "undelivered", "conditionally_delivered", "cancelled", "reserved_by_deliver"])
                 or (not self.exist_post["start_delivery_date"]))):
             return True
         return False
@@ -265,9 +270,9 @@ class Order:
 
         elif self.exist_post["status"] in ["awaiting_deliver", "reserved_by_deliver"]:
             if time_left <= 11:
-                title = "❗Нужно взять заказ в доставку"
+                title = "❕Нужно взять заказ в доставку"
             elif 11 < time_left < 30:
-                title = "⚠️Нужно начать доставлять"
+                title = "❗️Нужно начать доставлять"
             elif time_left > 30:
                 title = "☠️Заказ просрочен"
                 hashtag = "доставка_просрочена"

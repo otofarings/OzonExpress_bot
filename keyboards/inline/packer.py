@@ -1,11 +1,11 @@
-import collections
+from collections import OrderedDict
 
 from aiogram.dispatcher import FSMContext
 from aiogram.types import CallbackQuery
 
 from states.fsm import PreviousMenu, get_fsm_data, save_fsm_data, finish_state
 from utils.formate_text import PackerMenu
-from utils.formate_button import PackerButton, create_reply_markup
+from utils.formate_button import PackerButton, create_reply_markup, return_markup
 from utils.message import send_info_log
 from utils.db import sql
 from utils.ozon_express_api.request import get_info, complete_packaging_ozon
@@ -17,34 +17,31 @@ packer_btn = PackerButton()
 
 # ****************************************Packaging****************************************
 async def get_level_1(function: str, status: str) -> dict:
-    buttons = await packer_btn.pack_buttons_1(function, status)
-    text = await packer_txt.pack_menu_1()
-    return await create_reply_markup(text, buttons)
+    return await create_reply_markup(await packer_txt.pack_menu_1(),
+                                     await packer_btn.buttons_1(function, status))
 
 
 async def get_level_2(function: str, cll: CallbackQuery) -> dict:
     count = await sql.count_orders(cll.from_user.id, "awaiting_packaging")
     reserved_users = await sql.get_reserved_user(cll.from_user.id, "reserve_package")
 
-    buttons = await packer_btn.pack_buttons_2(function, count)
-    text = await packer_txt.pack_menu_2(count, reserved_users)
-    return await create_reply_markup(text, buttons)
+    return await create_reply_markup(await packer_txt.pack_menu_2(count, reserved_users),
+                                     await packer_btn.buttons_2(function, count))
 
 
 async def get_level_3(function: str, cll: CallbackQuery, state: FSMContext) -> dict:
     orders = await check_action_for_reserve_package(cll, state)
 
-    buttons = await packer_btn.pack_buttons_3(function, orders)
-    text = await packer_txt.pack_menu_3(orders)
-    return await create_reply_markup(text, buttons)
+    return await create_reply_markup(await packer_txt.pack_menu_3(orders),
+                                     await packer_btn.buttons_3(function, orders))
 
 
 async def get_level_4(function: str, cll: CallbackQuery, state: FSMContext) -> dict:
-    order = (await get_fsm_data(state, ["data_"]))["data_"][int(cll.data.split(":")[3])]
+    callback = cll.data.split(":")
+    order = (await get_fsm_data(state, ["data_"]))["data_"][int(callback[3])]
 
-    buttons = await packer_btn.pack_buttons_4(function, cll.data.split(":")[5])
-    text = await packer_txt.pack_menu_4(order)
-    return await create_reply_markup(text, buttons)
+    return await create_reply_markup(await packer_txt.pack_menu_4(order),
+                                     await packer_btn.buttons_4(function, callback[5]))
 
 
 async def get_level_5(function: str, state: FSMContext, cll: CallbackQuery = None,
@@ -53,55 +50,48 @@ async def get_level_5(function: str, state: FSMContext, cll: CallbackQuery = Non
 
     if obj == "category":
         await save_fsm_data(state, product_rank=int(cll.data.split(":")[4]))
-    products_info = await get_fsm_data(state, ["products", "product_rank", "all_ranks"])
+    products = await get_fsm_data(state, ["products", "product_rank", "all_ranks"])
 
     if first:
         data_lst = {}
-        for product in products_info["products"]:
-            if products_info["products"][product]['rank'] not in data_lst:
-                category_name = await sql.get_product_category_name(products_info["products"][product]['rank'])
-                data_lst[products_info["products"][product]['rank']] = category_name
+        for product in products["products"]:
+            if products["products"][product]['rank'] not in data_lst:
+                category = await sql.get_product_category_name(products["products"][product]['rank'])
+                data_lst[products["products"][product]['rank']] = category
         await save_fsm_data(state, category_names=data_lst)
 
-    category_names = collections.OrderedDict(sorted(
-        (await get_fsm_data(state, ["category_names"]))["category_names"].items()
-    ))
-
-    buttons = await packer_btn.pack_buttons_5(function, category_names, products_info, posting_number, obj, action)
-    return {"reply_markup": buttons}
+    category = OrderedDict(sorted((await get_fsm_data(state, ["category_names"]))["category_names"].items()))
+    return await return_markup(await packer_btn.buttons_5(function, category, products, posting_number, obj, action))
 
 
 async def get_level_6(function: str, cll: CallbackQuery, state: FSMContext) -> dict:
     callback = cll.data.split(":")
     product = (await get_fsm_data(state, ["products"]))["products"][callback[3]]
 
-    buttons = await packer_btn.pack_buttons_6(function, callback[5], callback[3])
-    text = await packer_txt.pack_menu_6(product, callback[4])
-    return await create_reply_markup(text, buttons)
+    return await create_reply_markup(await packer_txt.pack_menu_6(product, callback[4]),
+                                     await packer_btn.buttons_6(function, callback[5], callback[3]))
 
 
 async def get_level_7(function: str, cll: CallbackQuery) -> dict:
     callback = cll.data.split(":")
     products_info = await sql.get_products_info(callback[5])
 
-    buttons = await packer_btn.pack_buttons_7(function, callback[5], callback[6])
-    text = await packer_txt.pack_menu_7(products_info, callback[6])
-    return await create_reply_markup(text, buttons)
+    return await create_reply_markup(await packer_txt.pack_menu_7(products_info, callback[6]),
+                                     await packer_btn.buttons_7(function, callback[5], callback[6]))
 
 
 async def get_level_8(function: str, tg_id: int, posting_number: str, tz: str, action: str) -> dict:
-    products_info = await sql.get_products_info(posting_number)
     if action == "finish_cancel":
         status, cancel_status, posting_number = False, False, posting_number
     else:
+        products_info = await sql.get_products_info(posting_number)
         status, cancel_status, posting_number = await complete_packaging_ozon(products_info, tg_id)
     await finish_state(tg_id, tg_id)
     await check_cancellation_status(posting_number, tz, cancel_status, action)
     await send_info_log(tg_id, "Завершил сборку", posting_number, await check_completing_status(action, status))
 
-    buttons = await packer_btn.pack_buttons_8(function)
-    text = await packer_txt.pack_menu_8(posting_number, action)
-    return await create_reply_markup(text, buttons)
+    return await create_reply_markup(await packer_txt.pack_menu_8(posting_number, action),
+                                     await packer_btn.buttons_8(function))
 
 
 # ****************************************Extra****************************************
@@ -118,32 +108,6 @@ async def check_action_for_reserve_package(cll: CallbackQuery, state):
 async def get_callback_product_info(new_data):
     lst, i1, i2, i3 = (new_data, 0, 1, 2) if type(new_data) is list else (new_data.data.split(":"), 5, 3, 6)
     return lst[i1], lst[i2], lst[i3]
-
-
-async def check_change_in_quantity(quantity, fact_quantity) -> str:
-    more = f"{quantity} -> " if quantity < fact_quantity else ""
-    less = f" <- {quantity}" if quantity > fact_quantity else ""
-    return f"{more}{fact_quantity}{less}"
-
-
-async def update_product_quantity(product: dict, action: str, sku: int, posting_number) -> int:
-    fact_quantity = product["fact_quantity"]
-    if sku == product["sku"]:
-        if (action == "minus") and (fact_quantity != 0):
-            fact_quantity -= 1
-        elif (action == "plus") and (fact_quantity < product["quantity"]):
-            fact_quantity += 1
-    await sql.update_product_fact_quantity(product["name"], fact_quantity, posting_number)
-    return fact_quantity
-
-
-async def get_product_weight(product) -> str:
-    return product["weight"] if product["weight"] else "0"
-
-
-async def format_product_name(index, product_name: str) -> str:
-    lst_product_name = product_name.split(', ')
-    return f"{index + 1}. {lst_product_name[-1]}, {', '.join(lst_product_name[:-1])}"
 
 
 async def start_package(state: FSMContext, cll: CallbackQuery, tz: str) -> None:
@@ -169,39 +133,6 @@ async def check_cancellation_status(post_num: str, tz: str, cancel_status: bool 
 
 async def check_completing_status(action: str, status: str = None) -> str:
     return "Частично собран" if status else ("Отменен" if action == "finish_cancel" else "Полностью собран")
-
-
-async def get_callback_data_for_back_button(function: str) -> list:
-    return ["main", "1", "0", "0", "0", "back"] if function == 'packer' else ["order", "2", "0", "0", "0", "back"]
-
-
-async def get_data_level_1(status: str) -> list:
-    if status in ["on_shift", "reserve_package", "packaging"]:
-        return [{"Сборка отправления": ["package", "2", "0", "0", "0", "open"]},
-                {"Информация":         ["info", "1", "0", "0", "0", "open"]},
-                {"Завершить смену":    ["main", "1", "0", "0", "0", "finish"]}]
-    else:
-        return [{"Начать смену": ["main", "1", "0", "0", "0", "start"]},
-                {"Информация":   ["info", "1", "0", "0", "0", "open"]},
-                {"Выйти":        ["main", "0", "0", "0", "0", "close_bot"]}]
-
-
-async def get_data_level_2(count: int, callback_back: list) -> (str, list):
-    if count != 0:
-        buttons = [{"Назад":  callback_back,
-                    "Сборка": ["package", "3", "0", "0", "0", "reserve_package"]}]
-    else:
-        buttons = [{"Назад":    callback_back,
-                    "Обновить": ["package", "2", "0", "0", "0", "update"]}]
-    return buttons
-
-
-async def get_data_level_3(orders_data: list) -> (list, str):
-    buttons = []
-    for ind, order in enumerate(orders_data):
-        buttons.append({f"Заказ №{ind + 1}": ["package", "4", ind, "0", order["posting_number"], "open"]})
-    buttons.append({"Назад": ["package", "2", "0", "0", "0", "reserve_back"]})
-    return buttons
 
 
 async def get_info_for_products(cll: CallbackQuery) -> dict:
