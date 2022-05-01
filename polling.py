@@ -117,6 +117,7 @@ class Order:
         await cancel_action_message(self.posting_number)
         title = await get_new_title()
         await self.write_title(title)
+        await self.change_status()
         await sql.write_tag(self.order_number, self.timezone, "отменен")
         hashtags = await sql.get_tags(self.order_number)
 
